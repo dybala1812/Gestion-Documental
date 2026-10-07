@@ -27,3 +27,19 @@ export const CAPTCHA_DISABLED =
  */
 export const GOOGLE_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
+
+/**
+ * SOLO DESARROLLO: entra a los módulos sin pasar por el login, con un usuario
+ * simulado. Requiere `npm run dev` (import.meta.env.DEV) y en `.env.local`:
+ *   VITE_DEV_BYPASS_AUTH=true
+ *   VITE_DEV_BYPASS_ROL=admin   # admin | area | usuario
+ * En el build de producción import.meta.env.DEV es false: no tiene efecto.
+ * Las llamadas al backend real fallarán (no hay token válido).
+ */
+export const DEV_BYPASS_AUTH =
+  import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH === "true";
+
+export const DEV_BYPASS_ROL: "admin" | "area" | "usuario" =
+  (["admin", "area", "usuario"] as const).find(
+    (r) => r === import.meta.env.VITE_DEV_BYPASS_ROL,
+  ) ?? "admin";

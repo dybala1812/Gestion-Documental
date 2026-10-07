@@ -13,6 +13,7 @@ import {
   resolveDepName,
 } from "../lib/api";
 import { clearClassroomSession } from "../lib/classroomApi";
+import { DEV_BYPASS_AUTH, DEV_BYPASS_ROL } from "../lib/config";
 
 // ── Modelo de usuario normalizado para el frontend ──────────────────────
 /**
@@ -76,6 +77,32 @@ export interface Usuario {
  * @param d - Payload completo de la respuesta del endpoint /api/login/.
  * @returns Objeto `Usuario` normalizado (rol siempre "admin" si is_staff=true).
  */
+/** SOLO DESARROLLO: usuario simulado para entrar sin login (ver DEV_BYPASS_AUTH en config.ts). */
+function buildDevUser(): Usuario {
+  const esAdmin = DEV_BYPASS_ROL === "admin";
+  return {
+    id: "00000000-0000-0000-0000-000000000000",
+    nombre: "Usuario",
+    apellido: "Desarrollo",
+    email: "dev@localhost",
+    username: "dev",
+    tipo_documento: "CC",
+    cedula: "0",
+    telefono: "",
+    ciudad: "",
+    rol: DEV_BYPASS_ROL,
+    // Área: Administrativo de Área con todas las secciones del panel (Elecciones, TI, consulta de estudiantes).
+    roles: esAdmin ? ["ADMIN", "TI_STAFF"] : DEV_BYPASS_ROL === "area" ? ["REGISTRO_CONTROL", "TI_STAFF"] : [],
+    dependencyId: DEV_BYPASS_ROL === "area" ? "dev-dependency" : undefined,
+    dependencyName: DEV_BYPASS_ROL === "area" ? "Archivo Central (dev)" : undefined,
+    is_staff: esAdmin,
+    perfil_tipo: DEV_BYPASS_ROL === "area" ? "admin_area" : "externo",
+    is_area_leader: DEV_BYPASS_ROL === "area",
+    can_handle_pqrs: DEV_BYPASS_ROL === "area",
+    can_consume_campus_api: esAdmin || DEV_BYPASS_ROL === "area",
+  };
+}
+
 /** Determina si el usuario tiene capacidades de administrador. */
 function hasAdminPrivilege(is_staff: boolean, roles?: string[]): boolean {
   return is_staff || (roles?.includes("ADMIN") ?? false);
@@ -206,12 +233,16 @@ const AuthContext: React.Context<AuthContextType> =
  *  3. Si el token es inválido o el backend rechaza la sesión, la limpia automáticamente.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [loading, setLoading] = useState(true); // bloquea el render hasta tener estado de sesión
+  const [usuario, setUsuario] = useState<Usuario | null>(() => (DEV_BYPASS_AUTH ? buildDevUser() : null));
+  const [loading, setLoading] = useState(!DEV_BYPASS_AUTH); // bloquea el render hasta tener estado de sesión
   const navigate = useNavigate();
 
   // ── Escuchar evento de sesión expirada (emitido por apiFetch al recibir 401 irrecuperable) ──
   useEffect(() => {
+    if (DEV_BYPASS_AUTH) {
+      console.warn(`[DEV] Login omitido: sesión simulada con rol "${DEV_BYPASS_ROL}". Solo en npm run dev.`);
+      return; // en modo bypass los 401 del backend no cierran la sesión simulada
+    }
     const handleSessionExpired = () => {
       setUsuario(null);
       navigate("/login", { replace: true });
@@ -226,7 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // provocar carreras de rotación de refresh token y un logout espurio),
   // renovamos el access token cada 5 min mientras haya una sesión activa.
   useEffect(() => {
-    if (!usuario) return;
+    if (!usuario || DEV_BYPASS_AUTH) return;
     const interval = setInterval(() => {
       tryRefreshToken();
     }, 5 * 60 * 1000);
@@ -235,6 +266,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── Restaurar sesión al montar el proveedor ────────────────────────────────
   useEffect(() => {
+    if (DEV_BYPASS_AUTH) return; // sesión simulada: no restaurar ni validar contra el backend
     const stored = localStorage.getItem("usuario");
     const hasUser = !!stored;
     const hasAccess = !!tokens.getAccess();

@@ -21,7 +21,7 @@ import { Button } from "../../components/ui/button";
 import { Textarea } from "../../components/ui/textarea";
 import { Label } from "../../components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
-import { Building2, FileText, Clock, CheckCircle2, AlertCircle, X, User, Calendar, CalendarDays, ArrowLeft, Loader2, LayoutDashboard, Search, FileDown, FileSpreadsheet, ChevronDown, BarChart2, Target, RefreshCw, PlusCircle, Inbox, Send, Paperclip, Upload, Download, MessageSquare, Flag, Reply, StickyNote, CheckSquare, AlertTriangle, Globe, Printer, Activity, FilePlus, ArrowUpCircle, ShieldAlert, Check, Lock, Eye, Bell, BookOpen as GraduationCap, Package, ChevronRight, Menu, Home, HardDrive, PanelLeft, PanelRight, Database, Trash2, Mail, Phone, Vote as VoteIcon } from "lucide-react";
+import { Building2, FileText, Clock, CheckCircle2, AlertCircle, X, User, Calendar, CalendarDays, ArrowLeft, Loader2, LayoutDashboard, Search, FileDown, FileSpreadsheet, ChevronDown, BarChart2, Target, RefreshCw, PlusCircle, Inbox, Send, Paperclip, Upload, Download, MessageSquare, Flag, Reply, StickyNote, CheckSquare, AlertTriangle, Globe, Printer, Activity, FilePlus, ArrowUpCircle, ShieldAlert, Check, Lock, Eye, Bell, BookOpen as GraduationCap, Package, ChevronRight, Menu, Home, HardDrive, PanelLeft, PanelRight, Database, Trash2, Mail, Phone, Vote as VoteIcon, Archive } from "lucide-react";
 import {
   ResponsiveContainer,
   PieChart, Pie, Cell, Tooltip as RTooltip, Legend, Sector,
@@ -1939,6 +1939,20 @@ export function AreaDashboard() {
               <Building2 className="w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
               <span className="overflow-hidden whitespace-nowrap max-w-0 group-hover:max-w-[9rem] group-hover:pl-1.5 text-sm font-semibold transition-all duration-200 ease-out">PQRS Asignadas</span>
             </button>
+
+            {(usuario?.is_staff ||
+              usuario?.dependencyId ||
+              (usuario?.roles ?? []).some((r) => ["ADMIN", "ARCHIVO_CENTRAL", "REGISTRO_CONTROL", "SECRETARIA_GENERAL"].includes(String(r).trim().toUpperCase())) ||
+              usuario?.perfil_tipo === "admin_area") && (
+              <button
+                onClick={() => navigate("/archivo-central")}
+                title="Archivo Central"
+                className="group inline-flex items-center px-2.5 py-2 rounded-xl border bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-600 hover:text-white hover:border-orange-600 hover:shadow-md hover:shadow-orange-200/60 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out shrink-0"
+              >
+                <Archive className="w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
+                <span className="overflow-hidden whitespace-nowrap max-w-0 group-hover:max-w-[9rem] group-hover:pl-1.5 text-sm font-semibold transition-all duration-200 ease-out">Archivo Central</span>
+              </button>
+            )}
 
             <button
               onClick={() => navigate("/consulta")}

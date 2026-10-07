@@ -50,6 +50,7 @@ import { GestionSolicitudesRol } from "./pages/admin/GestionSolicitudesRol";
 import { QuizCentral } from "./pages/integrations/QuizCentral";
 import { ConvocatoriasCentral } from "./pages/integrations/ConvocatoriasCentral";
 import { EleccionesPanel } from "./components/elecciones/EleccionesPanel";
+import { ArchivoCentralArea } from "./pages/archivo-central/ArchivoCentralArea";
 // import { TIInventarioAreas } from "./pages/inventario/TIInventarioAreas";
 
 // ── Spinner compartido ────────────────────────────────────────────────────────
@@ -161,6 +162,34 @@ function EleccionesRoute({ children }: { children: React.ReactNode }) {
   const perfilHabilitado = ["estudiante", "docente", "admin_area"].includes(usuario.perfil_tipo ?? "");
   const acceso = usuario.is_staff || usuario.dependencyId || (usuario.roles ?? []).includes("REGISTRO_CONTROL") || (usuario.roles ?? []).includes("ADMIN") || perfilHabilitado;
   if (!acceso) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
+// ── Guardia para el módulo Archivo Central (SGD) ─────────────────────────────
+/**
+ * Acceso al módulo superior Archivo Central. Por el momento solo expone
+ * Comunicaciones, pero aquí se centralizarán documentos, transferencias,
+ * historias académicas e histórico. Permite admin, funcionarios de área y
+ * perfiles institucionales vinculados al SGD.
+ */
+function ArchivoCentralRoute({ children }: { children: React.ReactNode }) {
+  const { usuario, loading } = useAuth();
+  if (loading) return <AuthSpinner />;
+  if (!usuario) return <Navigate to="/login?redirect=/archivo-central" replace />;
+
+  const roles = (usuario.roles ?? []).map((r) => String(r).trim().toUpperCase());
+  const tieneAcceso =
+    usuario.is_staff ||
+    usuario.rol === "admin" ||
+    usuario.rol === "area" ||
+    roles.includes("ADMIN") ||
+    roles.includes("ARCHIVO_CENTRAL") ||
+    roles.includes("REGISTRO_CONTROL") ||
+    roles.includes("SECRETARIA_GENERAL");
+
+  if (!tieneAcceso) {
+    return <Navigate to={usuario.rol === "area" ? "/area" : "/dashboard"} replace />;
+  }
   return <>{children}</>;
 }
 
@@ -437,6 +466,14 @@ export const router = createBrowserRouter([
           <ProtectedRoute adminOnly>
             <GestionSolicitudesRol />
           </ProtectedRoute>
+        ),
+      },
+      {
+        path: "archivo-central",
+        element: (
+          <ArchivoCentralRoute>
+            <ArchivoCentralArea />
+          </ArchivoCentralRoute>
         ),
       },
       {

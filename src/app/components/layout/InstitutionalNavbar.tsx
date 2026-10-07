@@ -574,11 +574,10 @@ export function InstitutionalNavbar() {
                     <MobileItem index={4} to="/gestion-chatbot" label="Configurar Chatbot" icon={<Bot className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
                     <MobileItem index={5} to="/gestion-correo-tickets" label="Correo de Tickets" icon={<Mail className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
                     <MobileItem index={6} to="/gestion-correo-saliente" label="Correo Saliente" icon={<Send className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
-                    <MobileItem index={7} to="/gestion-whatsapp-masivo" label="WhatsApp Masivo" icon={<MessageSquare className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
-                    <MobileItem index={8} to="/admin-certificados" label="Certificados" icon={<GraduationCap className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
-                    <MobileItem index={9} to="/admin-diplomas" label="Diplomas" icon={<Shield className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
-                    <MobileItem index={10} to="/gestion-elecciones" label="Elecciones" icon={<Vote className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
-                    <MobileItem index={11} to="/consulta" label="Consultar Radicado" icon={<Search className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
+                    <MobileItem index={7} to="/admin-certificados" label="Certificados" icon={<GraduationCap className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
+                    <MobileItem index={8} to="/admin-diplomas" label="Diplomas" icon={<Shield className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
+                    <MobileItem index={9} to="/gestion-elecciones" label="Elecciones" icon={<Vote className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
+                    <MobileItem index={10} to="/consulta" label="Consultar Radicado" icon={<Search className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
                     {/* Sub-sección Landing */}
                     <motion.p
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}
