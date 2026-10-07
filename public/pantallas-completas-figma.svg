@@ -644,13 +644,13 @@
     <text x="2430" y="2435" text-anchor="middle" class="title-text" font-size="18">🔑 Credenciales de Prueba</text>
     
     <text x="1980" y="2470" font-family="Courier New" font-size="14" fill="#92400E">👨‍💼 Admin:</text>
-    <text x="2090" y="2470" font-family="Courier New" font-size="14" fill="#92400E" font-weight="600">admin@pqrs.com / <password-demo></text>
+    <text x="2090" y="2470" font-family="Courier New" font-size="14" fill="#92400E" font-weight="600">admin@pqrs.com / &lt;password-demo&gt;</text>
     
     <text x="1980" y="2500" font-family="Courier New" font-size="14" fill="#92400E">👤 Usuario:</text>
-    <text x="2090" y="2500" font-family="Courier New" font-size="14" fill="#92400E" font-weight="600">juan@correo.com / <password-demo></text>
+    <text x="2090" y="2500" font-family="Courier New" font-size="14" fill="#92400E" font-weight="600">juan@correo.com / &lt;password-demo&gt;</text>
     
     <text x="1980" y="2530" font-family="Courier New" font-size="14" fill="#92400E">🏢 Área:</text>
-    <text x="2090" y="2530" font-family="Courier New" font-size="14" fill="#92400E" font-weight="600">maria.area@pqrs.com / <password-demo></text>
+    <text x="2090" y="2530" font-family="Courier New" font-size="14" fill="#92400E" font-weight="600">maria.area@pqrs.com / &lt;password-demo&gt;</text>
     
     <!-- Workflows -->
     <text x="1950" y="2590" class="title-text" font-size="20">Flujos de Trabajo</text>

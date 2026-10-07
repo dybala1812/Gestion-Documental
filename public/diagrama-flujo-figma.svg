@@ -61,13 +61,13 @@
 
     <!-- Usuarios de prueba -->
     <rect x="1450" y="215" width="700" height="30" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2" rx="4"/>
-    <text x="1470" y="237" class="badge" fill="#92400E">admin@pqrs.com / admin123</text>
+    <text x="1470" y="237" class="badge" fill="#92400E">admin@pqrs.com / &lt;password-demo&gt;</text>
     
     <rect x="2170" y="215" width="700" height="30" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2" rx="4"/>
-    <text x="2190" y="237" class="badge" fill="#92400E">juan@correo.com / usuario123</text>
+    <text x="2190" y="237" class="badge" fill="#92400E">juan@correo.com / &lt;password-demo&gt;</text>
     
     <rect x="2890" y="215" width="750" height="30" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2" rx="4"/>
-    <text x="2910" y="237" class="badge" fill="#92400E">maria.area@pqrs.com / area123</text>
+    <text x="2910" y="237" class="badge" fill="#92400E">maria.area@pqrs.com / &lt;password-demo&gt;</text>
   </g>
 
   <!-- NIVEL 1: PANTALLAS PÚBLICAS -->

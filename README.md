@@ -341,11 +341,11 @@ VITE_GOOGLE_CLIENT_ID=xxxxxxxxxxxx.apps.googleusercontent.com
 
 ```bash
 # 1. Clonar el repositorio
-git clone https://github.com/DavidM3-M/App_PQRSF_ft.git
-cd "Sistema PQRS Institucional"
+git clone https://github.com/DavidM3-M/NOVA_FT.git
+cd NOVA_FT
 
 # 2. Instalar dependencias
-npm install
+npm ci
 
 # 3. Configurar variables de entorno
 cp .env.example .env.local   # editar con los valores correctos
@@ -355,6 +355,19 @@ npm run dev
 ```
 
 La aplicación estará disponible en `http://localhost:5173`.
+
+En PowerShell, use `Copy-Item .env.example .env.local` para copiar la
+configuración. Para desarrollo local sin reCAPTCHA, establezca
+`VITE_DISABLE_CAPTCHA=true`; no use ese valor en producción.
+
+Este repositorio contiene únicamente el frontend; no incluye el backend ni
+el historial del repositorio original. Los archivos `.env` y `.env.*` locales
+no deben publicarse: solamente se versiona `.env.example` con valores de ejemplo.
+Todas las variables `VITE_*` son visibles en el navegador; no configure claves
+privadas, contraseñas ni secretos de producción en ellas. La integración de
+intercambio de tokens con Classroom requiere un backend de pruebas y no incluye
+un secreto preconfigurado. Los documentos de demostración no proporcionan
+credenciales de acceso reales.
 
 ---
 
@@ -1298,4 +1311,3 @@ Encargado inicia sesión
 
 - **`Home.tsx`** y **`CrearPQRS.tsx`**: reemplazada la vista de pantalla completa post-radicación por un `Dialog` independiente con el número de radicado en formato grande, botón de **copiar al portapapeles** con feedback visual, y opciones para consultar el estado, radicar otra PQRS o cerrar.
 - **`index.html`**: añadidos `lang="es"`, `translate="no"` y `<meta name="google" content="notranslate">` para prevenir el error `removeChild` causado por extensiones de traducción automática.
-
