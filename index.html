@@ -1,0 +1,30 @@
+
+  <!DOCTYPE html>
+  <html lang="es" translate="no">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <meta name="google" content="notranslate" />
+      <!-- Cabeceras de seguridad HTTP via meta tags -->
+      <!-- NOTA: X-Content-Type-Options y X-Frame-Options NO funcionan via <meta>;
+           los navegadores las ignoran. Ambas se configuran como cabeceras HTTP reales
+           en nginx.conf (add_header X-Frame-Options / X-Content-Type-Options). -->
+      <meta name="referrer" content="strict-origin-when-cross-origin" />
+      <!--
+        Content Security Policy:
+        - script-src: solo propio + Google Identity Services (login con Google)
+        - style-src:  propio + inline (necesario para Tailwind/MUI en runtime)
+        - connect-src: propio + backend configurable por VITE_API_URL
+        - frame-src:  Google para el popup de OAuth
+        NOTA: ajustar connect-src con la URL real del backend en producción.
+      -->
+      <!-- CSP definida en nginx.conf para permitir configuración por entorno -->
+      <title>NOVA | Uniautónoma del Cauca</title>
+    </head>
+
+    <body>
+      <div id="root"></div>
+      <script type="module" src="/src/main.tsx"></script>
+    </body>
+  </html>
+  

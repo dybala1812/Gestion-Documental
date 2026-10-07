@@ -1,0 +1,38 @@
+# ── Dependencias ──────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Build output (se genera en el contenedor) ─────────────────────────
+dist/
+dist-ssr/
+build/
+
+# ── Variables de entorno (secretos) ───────────────────────────────────
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ── Control de versiones ──────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+
+# ── IDEs ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Logs ──────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Documentación y archivos que no van a producción ─────────────────
+*.md
+public/manual-pruebas-pqrs.html
+public/flujo-visual-pqrs.html
