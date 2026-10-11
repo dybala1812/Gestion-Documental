@@ -4,13 +4,11 @@
  *
  * Circuito de comunicaciones por correo: Bandeja (recepción, remisión a
  * dependencias, respuesta al remitente), Correos sin asociar y Registro histórico.
- * Distribución basada en los mockups (ia_contexto/diseno/); colores de NOVA.
- *
- * ⚠️ Usa datos simulados (lib/comunicacionesApi.ts) hasta conectar el backend.
+ * Los datos vienen del backend SGD (Next.js) a través de lib/comunicacionesApi.ts.
  */
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, CalendarDays, Clock, Inbox, Loader2, Mail, MailQuestion, RefreshCw, Send } from "lucide-react";
+import { AlertTriangle, CalendarDays, Inbox, Loader2, Mail, MailQuestion, RefreshCw, Send } from "lucide-react";
 import {
   type Comunicacion, type CorreoSinAsociar, type DependenciaCom,
   apiListComunicaciones, apiListCorreosSinAsociar, apiListDependenciasCom, estaVencida,
@@ -20,15 +18,21 @@ import { CorreosSinAsociar as CorreosSinAsociarSeccion } from "./CorreosSinAsoci
 import { RegistroHistorico } from "./RegistroHistorico";
 import { DetalleComunicacion } from "./DetalleComunicacion";
 
-type Seccion = "bandeja" | "sinAsociar" | "historico";
+export type SeccionComunicaciones = "bandeja" | "sinAsociar" | "historico";
+type Seccion = SeccionComunicaciones;
 
 interface Props {
   areaNombre: string;
   usuarioNombre: string;
+  /** Sección controlada desde el menú lateral de Archivo Central (opcional). */
+  seccion?: Seccion;
+  onSeccionChange?: (s: Seccion) => void;
 }
 
-export function ComunicacionesArea({ areaNombre, usuarioNombre }: Props) {
-  const [seccion, setSeccion] = useState<Seccion>("bandeja");
+export function ComunicacionesArea({ areaNombre, usuarioNombre, seccion: seccionControlada, onSeccionChange }: Props) {
+  const [seccionLocal, setSeccionLocal] = useState<Seccion>(seccionControlada ?? "bandeja");
+  const seccion = seccionControlada ?? seccionLocal;
+  const setSeccion = (s: Seccion) => { setSeccionLocal(s); onSeccionChange?.(s); };
   const [comunicaciones, setComunicaciones] = useState<Comunicacion[]>([]);
   const [correos, setCorreos] = useState<CorreoSinAsociar[]>([]);
   const [dependencias, setDependencias] = useState<DependenciaCom[]>([]);
@@ -68,77 +72,99 @@ export function ComunicacionesArea({ areaNombre, usuarioNombre }: Props) {
   const respondidas = comunicaciones.filter(c => c.estado === "respondida_dependencia").length;
   const vencidas = comunicaciones.filter(estaVencida).length;
 
+  const indicadores = [
+    { label: "Nuevas", sub: "Por remitir", valor: nuevas, icon: Inbox, cls: "bg-blue-50 text-blue-600 border-blue-100", iconBg: "bg-blue-100" },
+    { label: "Remitidas", sub: "Esperando dependencia", valor: remitidas, icon: Send, cls: "bg-amber-50 text-amber-600 border-amber-100", iconBg: "bg-amber-100" },
+    { label: "Respondidas", sub: "Por responder al remitente", valor: respondidas, icon: Mail, cls: "bg-violet-50 text-violet-600 border-violet-100", iconBg: "bg-violet-100" },
+    { label: "Vencidas", sub: "Plazo superado", valor: vencidas, icon: AlertTriangle, cls: "bg-red-50 text-red-600 border-red-100", iconBg: "bg-red-100" },
+  ];
+
+  // Detalle a pantalla completa: reemplaza la bandeja (como en el mockup).
+  if (abierta) {
+    return (
+      <DetalleComunicacion
+        comunicacion={abierta}
+        dependencias={dependencias}
+        usuarioNombre={usuarioNombre}
+        onClose={() => setAbierta(null)}
+        onActualizada={reemplazar}
+        onEliminada={(id) => {
+          setComunicaciones(prev => prev.filter(c => c.id !== id));
+          setCorreos(prev => prev.filter(c => c.comunicacion_id !== id));
+          setAbierta(null);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* ── Cabecera del módulo ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <Mail className="w-6 h-6 text-orange-500" />
-            Comunicaciones
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#c89b14] mb-1">Comunicaciones</p>
+          <h2 className="text-xl font-bold text-[#1e3a5f] flex items-center gap-2">
+            <Mail className="w-6 h-6 text-[#e8740e]" />
+            Bandeja de correspondencia
           </h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {areaNombre} · correos de <span className="font-medium">correspondencia@uniautonoma.edu.co</span> registrados por n8n
+          <p className="text-sm text-[#6b7a8d] mt-0.5">
+            {areaNombre} · correos de <span className="font-medium text-[#2c3e50]">correspondencia@uniautonoma.edu.co</span> registrados por n8n
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {vencidas > 0 && (
-            <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">
-              <AlertTriangle className="w-3 h-3" /> {vencidas} vencida(s)
-            </span>
-          )}
-          <button
-            onClick={cargar}
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-200 bg-white rounded-lg px-3 py-1.5 hover:bg-gray-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${cargando ? "animate-spin" : ""}`} /> Refrescar
-          </button>
-        </div>
+        <button
+          onClick={cargar}
+          className="flex items-center gap-1.5 text-xs font-semibold text-[#6b7a8d] border border-[rgba(30,58,95,0.09)] bg-white rounded-lg px-3 py-1.5 hover:bg-[#f3ede1] hover:text-[#1e3a5f] transition-colors shadow-sm"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${cargando ? "animate-spin" : ""}`} /> Refrescar
+        </button>
       </div>
 
       {/* ── Indicadores ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: "Nuevas", sub: "Por remitir", valor: nuevas, icon: Inbox, cls: "text-blue-600 bg-blue-50" },
-          { label: "Remitidas", sub: "Esperando dependencia", valor: remitidas, icon: Send, cls: "text-amber-600 bg-amber-50" },
-          { label: "Respondidas", sub: "Por responder al remitente", valor: respondidas, icon: Mail, cls: "text-violet-600 bg-violet-50" },
-          { label: "Vencidas", sub: "Plazo superado", valor: vencidas, icon: Clock, cls: "text-red-600 bg-red-50" },
-        ].map(({ label, sub, valor, icon: Icon, cls }) => (
-          <div key={label} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
-            <span className={`w-10 h-10 rounded-lg flex items-center justify-center ${cls}`}><Icon className="w-5 h-5" /></span>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {indicadores.map(({ label, sub, valor, icon: Icon, cls, iconBg }) => (
+          <div key={label} className={`rounded-xl p-4 border shadow-sm flex items-center gap-3 transition-transform hover:-translate-y-0.5 ${cls}`}>
+            <span className={`w-11 h-11 rounded-xl flex items-center justify-center ${iconBg}`}>
+              <Icon className="w-5 h-5" />
+            </span>
             <div>
-              <p className="text-2xl font-bold text-gray-900 leading-none">{cargando ? "–" : valor}</p>
-              <p className="text-xs font-semibold text-gray-700 mt-1">{label}</p>
-              <p className="text-[10px] text-gray-400">{sub}</p>
+              <p className="text-2xl font-bold leading-none">{cargando ? "–" : valor}</p>
+              <p className="text-xs font-bold mt-1">{label}</p>
+              <p className="text-[10px] opacity-70">{sub}</p>
             </div>
           </div>
         ))}
       </div>
 
       {/* ── Pestañas internas ───────────────────────────────────────────── */}
-      <div className="flex gap-0.5 bg-gray-100 rounded-lg p-0.5 w-fit">
-        {([
-          { key: "bandeja", label: "Bandeja", corto: "Bandeja", icon: Inbox, badge: 0 },
-          { key: "sinAsociar", label: "Correos sin asociar", corto: "Sin asociar", icon: MailQuestion, badge: correos.length },
-          { key: "historico", label: "Registro histórico", corto: "Histórico", icon: CalendarDays, badge: 0 },
-        ] as const).map(({ key, label, corto, icon: Icon, badge }) => (
-          <button
-            key={key}
-            onClick={() => setSeccion(key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              seccion === key ? "bg-white text-orange-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <Icon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{label}</span>
-            <span className="sm:hidden">{corto}</span>
-            {badge > 0 && <span className="ml-0.5 bg-red-500 text-white rounded-full px-1.5 text-[10px] font-bold">{badge}</span>}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex gap-1 bg-white border border-[rgba(30,58,95,0.09)] rounded-xl p-1 shadow-sm">
+          {([
+            { key: "bandeja", label: "Bandeja", corto: "Bandeja", icon: Inbox, badge: 0 },
+            { key: "sinAsociar", label: "Correos sin asociar", corto: "Sin asociar", icon: MailQuestion, badge: correos.length },
+            { key: "historico", label: "Registro histórico", corto: "Histórico", icon: CalendarDays, badge: 0 },
+          ] as const).map(({ key, label, corto, icon: Icon, badge }) => (
+            <button
+              key={key}
+              onClick={() => setSeccion(key)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                seccion === key ? "bg-[#1e3a5f] text-white shadow-sm" : "text-[#6b7a8d] hover:bg-[#f3ede1] hover:text-[#1e3a5f]"
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              <span className="hidden sm:inline">{label}</span>
+              <span className="sm:hidden">{corto}</span>
+              {!!badge && (
+                <span className="ml-0.5 bg-[#e8740e] text-white rounded-full px-1.5 text-[10px] font-bold">
+                  {badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       {cargando && comunicaciones.length === 0 ? (
-        <div className="flex items-center justify-center py-12 text-gray-400 text-sm gap-2">
+        <div className="flex items-center justify-center py-12 text-[#6b7a8d] text-sm gap-2">
           <Loader2 className="w-4 h-4 animate-spin" /> Cargando comunicaciones…
         </div>
       ) : (
@@ -150,10 +176,13 @@ export function ComunicacionesArea({ areaNombre, usuarioNombre }: Props) {
             <CorreosSinAsociarSeccion
               correos={correos}
               comunicaciones={comunicaciones}
-              usuarioNombre={usuarioNombre}
-              onResuelto={(correoId, com) => {
+              onResuelto={(correoId, com, comoNueva) => {
                 setCorreos(prev => prev.filter(c => c.id !== correoId));
-                reemplazar(com);
+                if (comoNueva) {
+                  setComunicaciones(prev => [com, ...prev].sort((a, b) => b.fecha_recepcion.localeCompare(a.fecha_recepcion)));
+                } else {
+                  reemplazar(com);
+                }
                 setAbierta(null);
               }}
             />
@@ -162,13 +191,6 @@ export function ComunicacionesArea({ areaNombre, usuarioNombre }: Props) {
         </>
       )}
 
-      <DetalleComunicacion
-        comunicacion={abierta}
-        dependencias={dependencias}
-        usuarioNombre={usuarioNombre}
-        onClose={() => setAbierta(null)}
-        onActualizada={reemplazar}
-      />
     </div>
   );
 }

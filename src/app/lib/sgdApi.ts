@@ -1,0 +1,98 @@
+/**
+ * @file sgdApi.ts
+ * @description Cliente HTTP para el backend SGD (Archivo Central).
+ *
+ * Reutiliza el JWT de NOVA almacenado por api.ts. El backend SGD valida ese
+ * token contra NOVA y sincroniza el usuario en Supabase.
+ */
+import { tokens, ApiError, tryRefreshToken } from "./api";
+import { DEV_BYPASS_AUTH } from "./config";
+
+/**
+ * SOLO DESARROLLO: con el atajo sin login (DEV_BYPASS_AUTH) no hay token de NOVA,
+ * así que se envía VITE_SGD_DEV_TOKEN, que el backend acepta solo en `next dev`
+ * (variable SGD_DEV_TOKEN). En el build de producción DEV_BYPASS_AUTH es false.
+ */
+const SGD_DEV_TOKEN: string | null =
+  DEV_BYPASS_AUTH && import.meta.env.VITE_SGD_DEV_TOKEN ? String(import.meta.env.VITE_SGD_DEV_TOKEN) : null;
+
+/**
+ * URL base del backend SGD. Se lee de VITE_SGD_API_URL.
+ * Si no está definida se asume el puerto por defecto de Next.js.
+ */
+export const SGD_API_BASE = import.meta.env.VITE_SGD_API_URL ?? "http://localhost:3000/api";
+
+/**
+ * Wrapper de fetch para el backend SGD.
+ *
+ * Envía el Bearer token de NOVA y Content-Type application/json.
+ * Si el backend SGD devuelve 401, intenta refrescar el token de NOVA con la
+ * misma lógica de api.ts y reintenta la petición una sola vez.
+ *
+ * Nota: las rutas deben empezar con "/" (ej. "/comunicaciones").
+ */
+export async function sgdFetch<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const url = `${SGD_API_BASE}${path}`;
+
+  const headers: Record<string, string> = {
+    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+    ...(options.headers as Record<string, string>),
+  };
+
+  const token = SGD_DEV_TOKEN ?? tokens.getAccess();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(url, { ...options, headers });
+
+  if (res.status === 401 && !SGD_DEV_TOKEN) {
+    const sentToken = (headers["Authorization"] as string | undefined)?.slice(7) ?? null;
+    const ok = await tryRefreshToken();
+    if (ok) {
+      const newToken = tokens.getAccess();
+      if (newToken && newToken !== sentToken) {
+        headers["Authorization"] = `Bearer ${newToken}`;
+        const retry = await fetch(url, { ...options, headers });
+        if (!retry.ok) {
+          const err = await retry.json().catch(() => ({}));
+          throw new ApiError(retry.status, err);
+        }
+        if (retry.status === 204) return undefined as unknown as T;
+        return retry.json() as Promise<T>;
+      }
+    }
+    throw new ApiError(401, { detail: "Su sesión ha expirado. Por favor inicie sesión de nuevo." });
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, err);
+  }
+
+  if (res.status === 204) return undefined as unknown as T;
+  return res.json() as Promise<T>;
+}
+
+/**
+ * Descarga un binario del backend SGD (p. ej. GET /archivos/{id}) con el mismo
+ * token que sgdFetch. Devuelve el Blob y el nombre del archivo (Content-Disposition).
+ */
+export async function sgdFetchBlob(path: string): Promise<{ blob: Blob; nombre: string | null }> {
+  const token = SGD_DEV_TOKEN ?? tokens.getAccess();
+  const res = await fetch(`${SGD_API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, err);
+  }
+  const cd = res.headers.get("content-disposition") ?? "";
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(cd)?.[1];
+  const simple = /filename="([^"]+)"/i.exec(cd)?.[1];
+  const nombre = utf8 ? decodeURIComponent(utf8) : simple ?? null;
+  return { blob: await res.blob(), nombre };
+}

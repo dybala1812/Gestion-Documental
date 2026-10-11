@@ -2,16 +2,15 @@
  * @file comunicacionesApi.ts
  * @description Capa de datos del módulo Comunicaciones (Archivo Central · SGD).
  *
- * ⚠️ POR AHORA USA DATOS SIMULADOS EN MEMORIA. Los tipos replican las tablas de
- * la base de datos (backned_sistema_gestion_documental/supabase/migrations/
- * 20261007000400_comunicaciones.sql), así que al conectar el backend solo hay
- * que reemplazar el cuerpo de las funciones `api*` por llamadas HTTP.
+ * Todas las llamadas van al backend SGD (Next.js). Reutiliza el JWT de NOVA.
+ * Los tipos replican las tablas de la base de datos.
  *
- * Reglas que respeta el simulador (las mismas que impone la base):
+ * Reglas que respeta el backend:
  *  - Estados: nueva → remitida → respondida_dependencia (↺ devuelta) → cerrada; anulada.
  *  - Solo se cierra al enviar la respuesta al remitente (crea la salida SAL).
  *  - Anular exige motivo. No hay borrado.
  */
+import { sgdFetch, sgdFetchBlob } from "./sgdApi";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +36,7 @@ export type TipoEvento =
   | "asociacion_manual"
   | "anulacion"
   | "nota"
+  | "correo_adicional"
   | "error_envio";
 
 export interface DependenciaCom {
@@ -151,6 +151,7 @@ export const EVENTO_LABEL: Record<TipoEvento, string> = {
   asociacion_manual: "Asociada manualmente",
   anulacion: "Anulada",
   nota: "Nota",
+  correo_adicional: "Correo adicional",
   error_envio: "Error de envío",
 };
 
@@ -232,335 +233,212 @@ export function formatoTamano(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// ── Datos simulados ─────────────────────────────────────────────────────────
-
-const hoy = new Date();
-const haceDias = (n: number, h = 9) => {
-  const d = new Date(hoy);
-  d.setDate(d.getDate() - n);
-  d.setHours(h, 15, 0, 0);
-  return d.toISOString();
-};
-const anio = hoy.getFullYear();
-const cons = (tipo: TipoComunicacion, n: number) => `${tipo}-${anio}-${String(n).padStart(6, "0")}`;
-
-const DEPENDENCIAS: DependenciaCom[] = [
-  { id: 1, codigo: "100", nombre: "Rectoría", correo_oficial: "rectoria@uniautonoma.edu.co" },
-  { id: 2, codigo: "110", nombre: "Secretaría General", correo_oficial: "secretaria.general@uniautonoma.edu.co" },
-  { id: 3, codigo: "120", nombre: "Mercadeo", correo_oficial: "mercadeo@uniautonoma.edu.co" },
-  { id: 4, codigo: "130", nombre: "Dirección Administrativa", correo_oficial: "direccion.administrativa@uniautonoma.edu.co" },
-  { id: 5, codigo: "140", nombre: "Gestión Documental", correo_oficial: "gestion.documental@uniautonoma.edu.co" },
-  { id: 6, codigo: "150", nombre: "Registro Académico", correo_oficial: "registro.academico@uniautonoma.edu.co" },
-  { id: 7, codigo: "160", nombre: "Talento Humano", correo_oficial: "talento.humano@uniautonoma.edu.co" },
-  { id: 8, codigo: "170", nombre: "Financiera", correo_oficial: "financiera@uniautonoma.edu.co" },
-  { id: 9, codigo: "180", nombre: "Bienestar Universitario", correo_oficial: "bienestar.universitario@uniautonoma.edu.co" },
-];
-
-const pdf = (nombre: string, kb = 240, de_respuesta = false): AdjuntoCom => ({
-  archivo_id: crypto.randomUUID(),
-  nombre_original: nombre,
-  tamano_bytes: kb * 1024,
-  mime: "application/pdf",
-  de_respuesta,
-});
-
-let seqEvento = 1;
-const ev = (tipo: TipoEvento, creado_en: string, extra: Partial<EventoCom> = {}): EventoCom => ({
-  id: seqEvento++, tipo, creado_en, usuario: extra.usuario ?? null, ...extra,
-});
-
-function base(
-  id: number, n: number, nombre: string, correo: string, asunto: string, dias: number,
-  extra: Partial<Comunicacion> = {},
-): Comunicacion {
-  const recibida = haceDias(dias, 8 + (id % 8));
-  return {
-    id, tipo: "ENT", consecutivo: cons("ENT", n), origen: "correo", estado: "nueva",
-    remitente_nombre: nombre, remitente_correo: correo, asunto,
-    cuerpo: `Buenos días.\n\nPor medio del presente me permito solicitar: ${asunto.toLowerCase()}.\n\nQuedo atento(a) a su respuesta.\n\nCordialmente,\n${nombre}`,
-    fecha_recepcion: recibida, dependencia_id: null, fecha_limite: null,
-    n_recordatorios: 0, por_escalar: false, adjuntos: [],
-    eventos: [ev("recepcion", recibida, { estado_nuevo: "nueva", detalle: "Registrada por n8n" }),
-              ev("acuse_recibo", recibida, { detalle: "Acuse enviado al remitente" })],
-    ...extra,
-  };
-}
-
-function remitida(c: Comunicacion, depId: number, diasRemision: number, plazo = PLAZO_DEFECTO_DIAS_HABILES): Comunicacion {
-  const f = haceDias(diasRemision, 10);
-  const dep = DEPENDENCIAS.find(d => d.id === depId)!;
-  c.estado = "remitida";
-  c.dependencia_id = depId;
-  c.fecha_limite = fechaLocalISO(sumarDiasHabiles(new Date(f), plazo));
-  c.eventos.push(ev("remision", f, { estado_anterior: "nueva", estado_nuevo: "remitida", dependencia: dep.nombre, usuario: "Diana Paz", detalle: `Plazo: ${plazo} días hábiles` }));
-  return c;
-}
-
-function respondida(c: Comunicacion, diasResp: number, adjunto: string): Comunicacion {
-  const f = haceDias(diasResp, 15);
-  const dep = DEPENDENCIAS.find(d => d.id === c.dependencia_id)!;
-  c.estado = "respondida_dependencia";
-  c.adjuntos.push(pdf(adjunto, 180, true));
-  c.eventos.push(ev("respuesta_dependencia", f, { estado_anterior: "remitida", estado_nuevo: "respondida_dependencia", dependencia: dep.nombre, detalle: `Adjunto: ${adjunto}` }));
-  return c;
-}
-
-function cerrada(c: Comunicacion, diasCierre: number): Comunicacion {
-  const f = haceDias(diasCierre, 11);
-  c.estado = "cerrada";
-  c.cerrado_en = f;
-  c.eventos.push(ev("respuesta_remitente", f, { estado_anterior: "respondida_dependencia", estado_nuevo: "cerrada", usuario: "Diana Paz", detalle: "Respuesta enviada al remitente" }));
-  return c;
-}
-
-const est = (n: string) => `${n}@estudiantes.uniautonoma.edu.co`;
-
-let comunicaciones: Comunicacion[] = [
-  // Nuevas
-  base(1, 1377, "Manuela Collazos", est("manuela.collazos"), "Financiación de matrícula", 0, { adjuntos: [pdf("Recibo de matrícula.pdf"), pdf("Carta de solicitud.pdf"), pdf("Certificado de ingresos.pdf")] }),
-  base(2, 1376, "Sebastián Dorado", est("sebastian.dorado"), "Beca por rendimiento académico", 0, { adjuntos: [pdf("Certificado de notas.pdf")] }),
-  base(3, 1375, "Laura Muñoz Paz", est("laura.munoz"), "Solicitud de paz y salvo", 0),
-  base(4, 1374, "Daniela Chicangana", est("daniela.chicangana"), "Apoyo psicológico", 1, { adjuntos: [pdf("Formato de remisión.pdf"), pdf("Carta.pdf")] }),
-  base(5, 1373, "Juan Camilo Rengifo", est("juan.camilo"), "Homologación de asignaturas", 1, { adjuntos: [pdf("Contenido programático 1.pdf"), pdf("Contenido programático 2.pdf"), pdf("Notas.pdf")] }),
-  base(6, 1372, "Óscar Iván Pito", est("oscar.ivan"), "Certificado laboral de exfuncionario", 1, { adjuntos: [pdf("Cédula.pdf")] }),
-  base(7, 1370, "Natalia Quilindo", est("natalia.quilindo"), "Aplazamiento de semestre", 2, { adjuntos: [pdf("Solicitud.pdf"), pdf("Soporte médico.pdf"), pdf("Recibo.pdf")] }),
-  base(8, 1368, "Luisa Fernanda Ante", est("luisa.fernanda"), "Solicitud de certificado de notas", 3, { adjuntos: [pdf("Solicitud.pdf"), pdf("Comprobante de pago.pdf")] }),
-  // Remitidas (algunas vencidas / sin respuesta hace ≥ 5 días)
-  remitida(base(9, 1352, "Andrés Chicangana", est("andres.chicangana"), "Devolución de matrícula", 18, { adjuntos: [pdf("Solicitud de devolución.pdf")] }), 8, 14),
-  remitida(base(10, 1355, "Camila Daza", est("camila.daza"), "Copia de resolución de grado", 15), 1, 11),
-  remitida(base(11, 1357, "Isabella Daza", est("isabella.daza"), "Copia del acta de consejo", 12, { adjuntos: [pdf("Solicitud.pdf")] }), 2, 8),
-  remitida(base(12, 1359, "Santiago Astudillo", est("santiago.astudillo"), "Certificado de estudios", 10), 6, 7),
-  remitida(base(13, 1360, "María José Cerón", est("maria.ceron"), "Constancia de matrícula", 9), 6, 6),
-  remitida(base(14, 1362, "Julián Bolaños", est("julian.bolanos"), "Uso de imagen institucional", 8), 3, 5),
-  remitida(base(15, 1366, "Sara Cerón", est("sara.ceron"), "Descuento por hermanos", 4, { adjuntos: [pdf("Registro civil.pdf")] }), 8, 2),
-  // Respondidas por la dependencia
-  respondida(remitida(base(16, 1369, "Valentina Ordóñez", est("valentina.ordonez"), "Solicitud de certificado de notas", 6, { adjuntos: [pdf("Solicitud.pdf")] }), 6, 2), 0, "Certificado de notas.pdf"),
-  respondida(remitida(base(17, 1363, "Esteban Guzmán", est("esteban.guzman"), "Reintegro académico", 9), 6, 7), 3, "Concepto de reintegro.pdf"),
-  // Devuelta
-  (() => {
-    const c = respondida(remitida(base(18, 1358, "Camila Guzmán", est("camila.guzman"), "Reliquidación de matrícula", 13), 8, 10), 6, "Respuesta parcial.pdf");
-    c.estado = "devuelta";
-    c.eventos.push(ev("devolucion", haceDias(4, 9), { estado_anterior: "respondida_dependencia", estado_nuevo: "devuelta", dependencia: "Financiera", usuario: "Diana Paz", detalle: "Falta el valor reliquidado" }));
-    return c;
-  })(),
-  // Cerradas
-  cerrada(respondida(remitida(base(19, 1354, "Luisa Fernanda Ante", est("luisa.fernanda"), "Copia del acta de grado", 13), 2, 12), 9, "Acta de grado.pdf"), 8),
-  cerrada(respondida(remitida(base(20, 1350, "Natalia Guzmán", est("natalia.guzman"), "Certificado de egresado", 20), 6, 19), 16, "Certificado.pdf"), 15),
-  cerrada(respondida(remitida(base(21, 1345, "Andrés Muñoz", est("andres.munoz"), "Carné estudiantil", 25), 9, 24), 20, "Respuesta Bienestar.pdf"), 19),
-  // Anulada
-  (() => {
-    const c = base(22, 1361, "Feria Educativa del Cauca", "eventos@feriaeducativacauca.org", "Publicidad feria 2026", 9);
-    c.estado = "anulada";
-    c.anulado_motivo = "Correo publicitario, no es una comunicación oficial";
-    c.eventos.push(ev("anulacion", haceDias(9, 12), { estado_anterior: "nueva", estado_nuevo: "anulada", usuario: "Diana Paz", detalle: c.anulado_motivo }));
-    return c;
-  })(),
-];
-
-let siguienteNumero: Record<TipoComunicacion, number> = { ENT: 1378, SAL: 201, INT: 231 };
-let siguienteId = 100;
-
-let correosSinAsociar: CorreoSinAsociar[] = [
-  {
-    id: 1, message_id: "<sa-1@mail>", de_nombre: "Jorge Imbachí · Registro Académico", de_correo: "registro.academico@uniautonoma.edu.co",
-    asunto: "RE: Solicitud de certificado de notas", recibido_en: haceDias(0, 8),
-    cuerpo: "Buenos días.\n\nAdjuntamos el certificado de notas solicitado por Valentina Ordóñez, firmado digitalmente.\n\nCordialmente,\nRegistro Académico",
-    motivo: "sin_etiqueta", posible_comunicacion_id: 16, adjuntos: [pdf("Certificado de notas.pdf", 210)], resuelto: false,
-  },
-  {
-    id: 2, message_id: "<sa-2@mail>", de_nombre: "Hernán Velasco · Financiera", de_correo: "financiera@uniautonoma.edu.co",
-    asunto: "Respuesta devolución de matrícula", recibido_en: haceDias(1, 16),
-    cuerpo: "Cordial saludo.\n\nSe aprueba la devolución del 80% del valor de la matrícula. Adjuntamos la resolución y el comprobante.\n\nFinanciera",
-    motivo: "sin_etiqueta", posible_comunicacion_id: 9, adjuntos: [pdf("Resolución devolución.pdf"), pdf("Comprobante.pdf")], resuelto: false,
-  },
-  {
-    id: 3, message_id: "<sa-3@mail>", de_nombre: "Mónica Erazo · Bienestar Universitario", de_correo: "bienestar.universitario@uniautonoma.edu.co",
-    asunto: `RE: [SGD ENT-${anio}-001299] Apoyo psicológico`, recibido_en: haceDias(1, 11),
-    cuerpo: "La estudiante fue contactada y tiene cita asignada para el próximo lunes.",
-    motivo: "etiqueta_no_coincide", posible_comunicacion_id: 4, adjuntos: [], resuelto: false,
-  },
-  {
-    id: 4, message_id: "<sa-4@mail>", de_nombre: "Feria Educativa del Cauca", de_correo: "eventos@feriaeducativacauca.org",
-    asunto: "Invitación a la Feria Universitaria 2026", recibido_en: haceDias(2, 10),
-    cuerpo: "Invitamos a la Universidad Autónoma a participar en la Feria Universitaria 2026.",
-    motivo: "remitente_externo_sin_etiqueta", posible_comunicacion_id: null, adjuntos: [pdf("Invitación.pdf", 520)], resuelto: false,
-  },
-];
-
-// Histórico: totales por mes del año actual y de los anteriores (importados de Excel antes de 2026).
-function resumenHistorico(year: number): ResumenMesHistorico[] {
-  const mesActual = hoy.getMonth() + 1;
-  return Array.from({ length: 12 }, (_, i) => {
-    const mes = i + 1;
-    if (year === anio && mes > mesActual) return { mes, cerradas_sistema: -1, importadas: -1 }; // aún no llega
-    const semilla = (year * 13 + mes * 7) % 17;
-    if (year === anio) {
-      const cerradasMes = comunicaciones.filter(c => c.estado === "cerrada" && c.cerrado_en && new Date(c.cerrado_en).getMonth() + 1 === mes).length;
-      return { mes, cerradas_sistema: cerradasMes + (mes < mesActual ? 2 + (semilla % 4) : 0), importadas: mes <= 3 ? 38 + semilla : 0 };
-    }
-    return { mes, cerradas_sistema: 0, importadas: 30 + semilla * 2 };
-  });
-}
-
-const delay = (ms = 250) => new Promise(r => setTimeout(r, ms));
-const clonar = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
-
-// ── API (simulada) ──────────────────────────────────────────────────────────
+// ── API real hacia el backend SGD ───────────────────────────────────────────
 
 export async function apiListDependenciasCom(): Promise<DependenciaCom[]> {
-  await delay(100);
-  return clonar(DEPENDENCIAS);
+  return sgdFetch<DependenciaCom[]>("/dependencias");
 }
 
-export async function apiListComunicaciones(): Promise<Comunicacion[]> {
-  await delay();
-  return clonar([...comunicaciones].sort((a, b) => b.fecha_recepcion.localeCompare(a.fecha_recepcion)));
+interface ListComunicacionesFiltros {
+  estado?: string;
+  anio?: number;
+  mes?: number;
+  dependencia_id?: number;
+  tipo?: string;
+  q?: string;
 }
 
-function actualizar(id: number, fn: (c: Comunicacion) => void): Comunicacion {
-  const c = comunicaciones.find(x => x.id === id);
-  if (!c) throw new Error("Comunicación no encontrada");
-  fn(c);
-  return clonar(c);
+export async function apiListComunicaciones(filtros: ListComunicacionesFiltros = {}): Promise<Comunicacion[]> {
+  const q = new URLSearchParams();
+  if (filtros.estado) q.set("estado", filtros.estado);
+  if (filtros.anio) q.set("anio", String(filtros.anio));
+  if (filtros.mes) q.set("mes", String(filtros.mes));
+  if (filtros.dependencia_id) q.set("dependencia_id", String(filtros.dependencia_id));
+  if (filtros.tipo) q.set("tipo", filtros.tipo);
+  if (filtros.q) q.set("q", filtros.q);
+  const qs = q.toString() ? `?${q}` : "";
+  return sgdFetch<Comunicacion[]>(`/comunicaciones${qs}`);
 }
 
-function exigirTransicion(c: Comunicacion, hacia: EstadoComunicacion) {
-  if (!TRANSICIONES[c.estado].includes(hacia)) {
-    throw new Error(`No se puede pasar de "${ESTADO_LABEL[c.estado]}" a "${ESTADO_LABEL[hacia]}"`);
-  }
+/** Obtiene una comunicación por id. */
+export async function apiObtenerComunicacion(id: number): Promise<Comunicacion> {
+  return sgdFetch<Comunicacion>(`/comunicaciones/${id}`);
 }
 
-/** F2 · Remitir a una dependencia con plazo en días hábiles. */
+/** F2 · Remitir a una dependencia con plazo en días hábiles.
+ *  El frontend dispara el webhook de n8n; n8n envía el correo y luego actualiza el estado vía /api/n8n/remisiones/remitir.
+ */
 export async function apiRemitirComunicacion(
-  id: number, payload: { dependencia_id: number; plazo_dias_habiles: number; mensaje: string; adjuntos: string[] },
-  usuario: string,
+  id: number,
+  payload: { dependencia_id: number; plazo_dias_habiles: number; mensaje: string; adjuntos: string[] },
 ): Promise<Comunicacion> {
-  await delay();
-  return actualizar(id, c => {
-    exigirTransicion(c, "remitida");
-    const dep = DEPENDENCIAS.find(d => d.id === payload.dependencia_id);
-    if (!dep) throw new Error("Dependencia no válida");
-    c.estado = "remitida";
-    c.dependencia_id = dep.id;
-    c.fecha_limite = fechaLocalISO(sumarDiasHabiles(new Date(), payload.plazo_dias_habiles));
-    c.n_recordatorios = 0;
-    c.por_escalar = false;
-    c.eventos.push(ev("remision", new Date().toISOString(), {
-      estado_anterior: "nueva", estado_nuevo: "remitida", dependencia: dep.nombre, usuario,
-      detalle: `Plazo: ${payload.plazo_dias_habiles} días hábiles · ${payload.adjuntos.length} adjunto(s)${payload.mensaje ? ` · "${payload.mensaje}"` : ""}`,
-    }));
+  const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_REMITIR_URL;
+  if (!webhookUrl) {
+    throw new Error("VITE_N8N_WEBHOOK_REMITIR_URL no está configurado");
+  }
+
+  const webhookToken = import.meta.env.VITE_N8N_WEBHOOK_TOKEN;
+  const webhookAuthHeader = import.meta.env.VITE_N8N_WEBHOOK_AUTH_HEADER ?? "Authorization";
+  const webhookAuthPrefix = import.meta.env.VITE_N8N_WEBHOOK_AUTH_PREFIX ?? "Bearer ";
+  const authValue = webhookToken ? `${webhookAuthPrefix}${webhookToken}` : undefined;
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authValue) headers[webhookAuthHeader] = authValue;
+
+  const usuarioId = Number(import.meta.env.VITE_N8N_WEBHOOK_USUARIO_ID) || 1;
+
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      modo: "remitir",
+      comunicacion_id: id,
+      usuario_id: usuarioId,
+      dependencia_id: payload.dependencia_id,
+      plazo_dias_habiles: payload.plazo_dias_habiles,
+      mensaje: payload.mensaje,
+      adjuntos_ids: payload.adjuntos,
+    }),
   });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => "Error en n8n");
+    throw new Error(`n8n respondió ${res.status}: ${err}`);
+  }
+
+  // n8n actualizó el estado; refrescamos la comunicación desde el backend.
+  return apiObtenerComunicacion(id);
 }
 
 /** F2 · Devolver a la dependencia (respuesta incompleta). */
-export async function apiDevolverComunicacion(id: number, motivo: string, usuario: string): Promise<Comunicacion> {
-  await delay();
-  return actualizar(id, c => {
-    exigirTransicion(c, "devuelta");
-    const dep = DEPENDENCIAS.find(d => d.id === c.dependencia_id);
-    c.estado = "devuelta";
-    c.fecha_limite = fechaLocalISO(sumarDiasHabiles(new Date(), PLAZO_DEFECTO_DIAS_HABILES));
-    c.eventos.push(ev("devolucion", new Date().toISOString(), {
-      estado_anterior: "respondida_dependencia", estado_nuevo: "devuelta", dependencia: dep?.nombre, usuario, detalle: motivo,
-    }));
+export async function apiDevolverComunicacion(id: number, motivo: string): Promise<Comunicacion> {
+  return sgdFetch<Comunicacion>(`/comunicaciones/${id}/devolver`, {
+    method: "POST",
+    body: JSON.stringify({ mensaje: motivo }),
   });
 }
 
-/** F3 · Enviar respuesta al remitente: crea la salida SAL y cierra la entrada. */
+/** F3 · Enviar respuesta al remitente: dispara el webhook de n8n, que envía el correo y luego cierra la entrada.
+ *  Devuelve la comunicación de entrada actualizada desde el backend.
+ */
 export async function apiResponderRemitente(
-  id: number, payload: { asunto: string; cuerpo: string; adjuntos: string[] }, usuario: string,
-): Promise<{ entrada: Comunicacion; salida: Comunicacion }> {
-  await delay(400);
-  const entrada = comunicaciones.find(x => x.id === id);
-  if (!entrada) throw new Error("Comunicación no encontrada");
-  exigirTransicion(entrada, "cerrada");
-  const ahora = new Date().toISOString();
-  const salida: Comunicacion = {
-    id: siguienteId++, tipo: "SAL", consecutivo: cons("SAL", siguienteNumero.SAL++), origen: "correo", estado: "cerrada",
-    remitente_nombre: "Archivo Central", remitente_correo: "correspondencia@uniautonoma.edu.co",
-    destinatario_nombre: entrada.remitente_nombre, destinatario_correo: entrada.remitente_correo,
-    asunto: payload.asunto, cuerpo: payload.cuerpo, fecha_recepcion: ahora, dependencia_id: entrada.dependencia_id,
-    fecha_limite: null, comunicacion_entrada_id: entrada.id, n_recordatorios: 0, por_escalar: false, cerrado_en: ahora,
-    adjuntos: entrada.adjuntos.filter(a => payload.adjuntos.includes(a.archivo_id)),
-    eventos: [ev("respuesta_remitente", ahora, { estado_nuevo: "cerrada", usuario, detalle: `Respuesta a ${entrada.consecutivo}` })],
-  };
-  comunicaciones.push(salida);
-  entrada.estado = "cerrada";
-  entrada.cerrado_en = ahora;
-  entrada.eventos.push(ev("respuesta_remitente", ahora, {
-    estado_anterior: "respondida_dependencia", estado_nuevo: "cerrada", usuario, detalle: `Salida ${salida.consecutivo}`,
-  }));
-  return { entrada: clonar(entrada), salida: clonar(salida) };
+  id: number,
+  payload: { asunto: string; cuerpo: string; adjuntos: string[] },
+): Promise<Comunicacion> {
+  const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_RESPONDER_URL;
+  if (!webhookUrl) {
+    throw new Error("VITE_N8N_WEBHOOK_RESPONDER_URL no está configurado");
+  }
+
+  const webhookToken = import.meta.env.VITE_N8N_WEBHOOK_TOKEN;
+  const webhookAuthHeader = import.meta.env.VITE_N8N_WEBHOOK_AUTH_HEADER ?? "Authorization";
+  const webhookAuthPrefix = import.meta.env.VITE_N8N_WEBHOOK_AUTH_PREFIX ?? "Bearer ";
+  const authValue = webhookToken ? `${webhookAuthPrefix}${webhookToken}` : undefined;
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authValue) headers[webhookAuthHeader] = authValue;
+
+  const usuarioId = Number(import.meta.env.VITE_N8N_WEBHOOK_USUARIO_ID) || 1;
+
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      modo: "responder",
+      comunicacion_id: id,
+      usuario_id: usuarioId,
+      asunto: payload.asunto,
+      cuerpo: payload.cuerpo,
+      adjuntos_ids: payload.adjuntos,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => "Error en n8n");
+    throw new Error(`n8n respondió ${res.status}: ${err}`);
+  }
+
+  // n8n enviará el correo y luego cerrará la entrada vía /api/comunicaciones/[id]/responder.
+  return apiObtenerComunicacion(id);
 }
 
 /** Anular con motivo (RF-AC-024). */
-export async function apiAnularComunicacion(id: number, motivo: string, usuario: string): Promise<Comunicacion> {
-  await delay();
-  if (!motivo.trim()) throw new Error("El motivo es obligatorio");
-  return actualizar(id, c => {
-    exigirTransicion(c, "anulada");
-    const anterior = c.estado;
-    c.estado = "anulada";
-    c.anulado_motivo = motivo;
-    c.eventos.push(ev("anulacion", new Date().toISOString(), { estado_anterior: anterior, estado_nuevo: "anulada", usuario, detalle: motivo }));
+export async function apiAnularComunicacion(id: number, motivo: string): Promise<Comunicacion> {
+  return sgdFetch<Comunicacion>(`/comunicaciones/${id}/anular`, {
+    method: "POST",
+    body: JSON.stringify({ motivo }),
+  });
+}
+
+/** F4 manual · Enviar recordatorio editable para una comunicación remitida/devuelta. */
+export async function apiRecordatorioManual(
+  id: number,
+  payload: { asunto?: string; cuerpo?: string; adjuntos?: string[] },
+): Promise<{ ok: boolean; comunicacion_id: number; n8n: unknown }> {
+  return sgdFetch<{ ok: boolean; comunicacion_id: number; n8n: unknown }>(`/comunicaciones/${id}/recordatorio-manual`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Enviar correo adicional a remitente o dependencia asociado a una comunicación. */
+export async function apiCorreoAdicional(
+  id: number,
+  payload: { destinatario_tipo: "remitente" | "dependencia"; asunto: string; cuerpo: string; adjuntos?: string[] },
+): Promise<{ ok: boolean; comunicacion_id: number; n8n: unknown }> {
+  return sgdFetch<{ ok: boolean; comunicacion_id: number; n8n: unknown }>(`/comunicaciones/${id}/correo-adicional`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Respuesta directa al remitente sin pasar por dependencia (excepción a RN-AC-09). */
+export async function apiResponderDirecto(
+  id: number,
+  payload: { asunto?: string; cuerpo: string; adjuntos?: string[] },
+): Promise<{ ok: boolean; comunicacion_id: number; n8n: unknown }> {
+  return sgdFetch<{ ok: boolean; comunicacion_id: number; n8n: unknown }>(`/comunicaciones/${id}/responder-directo`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 
 export async function apiListCorreosSinAsociar(): Promise<CorreoSinAsociar[]> {
-  await delay();
-  return clonar(correosSinAsociar.filter(c => !c.resuelto));
+  return sgdFetch<CorreoSinAsociar[]>("/correos-sin-asociar");
 }
 
 /** Asociar un correo sin asociar como respuesta de una comunicación remitida/devuelta. */
-export async function apiAsociarCorreo(correoId: number, comunicacionId: number, usuario: string): Promise<Comunicacion> {
-  await delay();
-  const correo = correosSinAsociar.find(c => c.id === correoId);
-  if (!correo) throw new Error("Correo no encontrado");
-  const com = actualizar(comunicacionId, c => {
-    exigirTransicion(c, "respondida_dependencia");
-    const anterior = c.estado;
-    c.estado = "respondida_dependencia";
-    c.adjuntos.push(...correo.adjuntos.map(a => ({ ...a, de_respuesta: true })));
-    c.eventos.push(ev("asociacion_manual", new Date().toISOString(), { usuario, detalle: `Correo de ${correo.de_correo} asociado manualmente` }));
-    c.eventos.push(ev("respuesta_dependencia", new Date().toISOString(), { estado_anterior: anterior, estado_nuevo: "respondida_dependencia", detalle: correo.asunto }));
+export async function apiAsociarCorreo(correoId: number, comunicacionId: number): Promise<Comunicacion> {
+  return sgdFetch<Comunicacion>(`/correos-sin-asociar/${correoId}/asociar`, {
+    method: "POST",
+    body: JSON.stringify({ comunicacion_id: comunicacionId }),
   });
-  correo.resuelto = true;
-  correo.resuelto_como = "asociado";
-  correo.comunicacion_id = comunicacionId;
-  return com;
 }
 
 /** Crear una comunicación nueva a partir de un correo sin asociar. */
-export async function apiCrearDesdeCorreo(correoId: number, usuario: string): Promise<Comunicacion> {
-  await delay();
-  const correo = correosSinAsociar.find(c => c.id === correoId);
-  if (!correo) throw new Error("Correo no encontrado");
-  const nueva = base(siguienteId++, siguienteNumero.ENT++, correo.de_nombre ?? correo.de_correo, correo.de_correo, correo.asunto ?? "(sin asunto)", 0, {
-    cuerpo: correo.cuerpo, adjuntos: correo.adjuntos, fecha_recepcion: correo.recibido_en,
-  });
-  nueva.eventos.push(ev("asociacion_manual", new Date().toISOString(), { usuario, detalle: "Creada desde Correos sin asociar" }));
-  comunicaciones.push(nueva);
-  correo.resuelto = true;
-  correo.resuelto_como = "nueva";
-  correo.comunicacion_id = nueva.id;
-  return clonar(nueva);
+export async function apiCrearDesdeCorreo(correoId: number): Promise<Comunicacion> {
+  return sgdFetch<Comunicacion>(`/correos-sin-asociar/${correoId}/crear`, { method: "POST" });
 }
 
-export async function apiResumenHistorico(year: number): Promise<ResumenMesHistorico[]> {
-  await delay();
-  return resumenHistorico(year);
+// ── Histórico: aún no hay endpoints en el backend ───────────────────────────
+// Cuando se implementen, reemplazar estas funciones por llamadas a /api/historico/*.
+
+export async function apiResumenHistorico(_year: number): Promise<ResumenMesHistorico[]> {
+  // TODO: implementar backend de registro histórico (RF-AC-020).
+  return [];
 }
 
-/** Comunicaciones de un mes del histórico (cerradas en el sistema). Las importadas las devolverá el backend. */
-export async function apiComunicacionesDelMes(year: number, mes: number): Promise<Comunicacion[]> {
-  await delay();
-  return clonar(comunicaciones.filter(c => {
-    const f = new Date(c.cerrado_en ?? c.fecha_recepcion);
-    return c.estado === "cerrada" && f.getFullYear() === year && f.getMonth() + 1 === mes;
-  }));
+export async function apiComunicacionesDelMes(_year: number, _mes: number): Promise<Comunicacion[]> {
+  // TODO: implementar backend de registro histórico (RF-AC-020).
+  return [];
 }
 
-/** Para reiniciar el simulador en pruebas. */
-export function __resetComunicacionesMock() {
-  siguienteNumero = { ENT: 1378, SAL: 201, INT: 231 };
+/** ⚠️ SOLO PRUEBAS: elimina físicamente una comunicación y sus archivos. */
+export async function apiEliminarComunicacion(id: number): Promise<{ eliminado: boolean; consecutivo: string }> {
+  return sgdFetch<{ eliminado: boolean; consecutivo: string }>(`/comunicaciones/${id}/eliminar`, { method: "DELETE" });
+}
+
+/** Descarga un adjunto (GET /archivos/{id}) para verlo o guardarlo. */
+export async function apiDescargarArchivo(archivoId: string): Promise<{ blob: Blob; nombre: string | null }> {
+  return sgdFetchBlob(`/archivos/${archivoId}`);
 }
