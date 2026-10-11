@@ -251,6 +251,9 @@ export function InstitutionalNavbar() {
   };
 
   const isActive = (path: string) => location.pathname === path;
+  // En el módulo Archivo Central (SGD) el usuario se identifica como tal bajo su nombre.
+  const enArchivoCentral = location.pathname.startsWith('/archivo-central');
+  const etiquetaRol = enArchivoCentral ? 'Archivo Central' : user?.rol;
 
   const initials = user?.nombre
     ? user.nombre.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
@@ -395,7 +398,7 @@ export function InstitutionalNavbar() {
                     </div>
                     <div className="text-right leading-tight">
                       <p className="text-sm font-semibold text-white">{user.nombre}</p>
-                      <p className="text-[11px] text-[#ffc107] uppercase tracking-wider">{user.rol}</p>
+                      <p className="text-[11px] text-[#ffc107] uppercase tracking-wider font-semibold">{etiquetaRol}</p>
                     </div>
                   </div>
                   <motion.button
@@ -505,7 +508,7 @@ export function InstitutionalNavbar() {
                     <p className="text-sm font-bold text-white truncate">{user.nombre}</p>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                      <p className="text-[11px] text-[#ffc107] uppercase tracking-widest font-semibold">{user.rol}</p>
+                      <p className="text-[11px] text-[#ffc107] uppercase tracking-widest font-semibold">{etiquetaRol}</p>
                     </div>
                   </div>
                 </motion.div>
