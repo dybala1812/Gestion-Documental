@@ -23,6 +23,20 @@ const SGD_DEV_TOKEN: string | null =
 export const SGD_API_BASE = import.meta.env.VITE_SGD_API_URL ?? "http://localhost:3000/api";
 
 /**
+ * Crea el ApiError con el motivo REAL que devuelve el backend SGD.
+ * El backend responde { error, detalle?, campo? }; ApiError (de NOVA/Django) solo lee `detail`
+ * y si no lo encuentra muestra un texto genérico por código HTTP ("Los datos enviados no son
+ * válidos…"), que oculta la causa. Aquí se copia el motivo a `detail`.
+ */
+function errorSgd(status: number, cuerpo: Record<string, unknown>): ApiError {
+  const detalle = typeof cuerpo.detalle === "string" ? cuerpo.detalle : null;
+  const error = typeof cuerpo.error === "string" ? cuerpo.error : null;
+  // "Datos inválidos: cuerpo es obligatorio" ya trae el motivo; si no, se usa detalle o error.
+  const motivo = error && detalle && !error.includes(detalle) ? `${error}: ${detalle}` : (error ?? detalle);
+  return new ApiError(status, motivo ? { detail: motivo } : cuerpo);
+}
+
+/**
  * Wrapper de fetch para el backend SGD.
  *
  * Envía el Bearer token de NOVA y Content-Type application/json.
@@ -59,7 +73,7 @@ export async function sgdFetch<T>(
         const retry = await fetch(url, { ...options, headers });
         if (!retry.ok) {
           const err = await retry.json().catch(() => ({}));
-          throw new ApiError(retry.status, err);
+          throw errorSgd(retry.status, err);
         }
         if (retry.status === 204) return undefined as unknown as T;
         return retry.json() as Promise<T>;
@@ -70,7 +84,7 @@ export async function sgdFetch<T>(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, err);
+    throw errorSgd(res.status, err);
   }
 
   if (res.status === 204) return undefined as unknown as T;
@@ -88,7 +102,7 @@ export async function sgdFetchBlob(path: string): Promise<{ blob: Blob; nombre: 
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, err);
+    throw errorSgd(res.status, err);
   }
   const cd = res.headers.get("content-disposition") ?? "";
   const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(cd)?.[1];

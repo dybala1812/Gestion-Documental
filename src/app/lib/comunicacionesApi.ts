@@ -381,10 +381,11 @@ export async function apiRecordatorioManual(
   });
 }
 
-/** Enviar correo adicional a remitente o dependencia asociado a una comunicación. */
+/** Enviar correo adicional asociado a una comunicación: al remitente o a una dependencia
+ *  (la asignada si no se indica `dependencia_id`, o cualquier otra dependencia activa). */
 export async function apiCorreoAdicional(
   id: number,
-  payload: { destinatario_tipo: "remitente" | "dependencia"; asunto: string; cuerpo: string; adjuntos?: string[] },
+  payload: { destinatario_tipo: "remitente" | "dependencia"; dependencia_id?: number; asunto: string; cuerpo: string; adjuntos?: string[] },
 ): Promise<{ ok: boolean; comunicacion_id: number; n8n: unknown }> {
   return sgdFetch<{ ok: boolean; comunicacion_id: number; n8n: unknown }>(`/comunicaciones/${id}/correo-adicional`, {
     method: "POST",
