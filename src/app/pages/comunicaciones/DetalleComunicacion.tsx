@@ -5,10 +5,10 @@
  * original, visor de adjuntos, datos e historial. Acciones según el estado:
  * Remitir, Devolver, Enviar respuesta y Anular (RF-AC-016, RF-AC-017, RF-AC-024).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Ban, Bell, Check, Clock, CornerUpLeft, Loader2, Mail, MailPlus, Send, Trash2, Undo2,
+  ArrowLeft, Ban, Bell, Check, ChevronRight, Clock, CornerUpLeft, Inbox, Loader2, Mail, MailPlus, Send, Trash2, Undo2,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -23,6 +23,7 @@ import {
   apiAnularComunicacion, apiCorreoAdicional, apiDevolverComunicacion, apiEliminarComunicacion, apiRecordatorioManual, apiRemitirComunicacion, apiResponderDirecto, apiResponderRemitente,
   estaVencida, formatoFecha, sumarDiasHabiles,
 } from "../../lib/comunicacionesApi";
+import { type CorreoEvento, EVENTOS_CON_CORREO, apiCorreoDeEvento } from "../../lib/correosEventoApi";
 import { AdjuntoChip, EstadoBadge } from "./comunicacionesUi";
 import { VisorArchivos } from "./VisorArchivos";
 
@@ -80,6 +81,78 @@ function textoDetalle(detalle: string | null | undefined): string | null {
   return lineas.length ? lineas.join("\n") : null;
 }
 
+/** Respuesta directa de Archivo Central: no es un correo (el correo está en "Respuesta enviada al remitente"). */
+function esDirecta(detalle: string | null | undefined): boolean {
+  if (!detalle) return false;
+  try { return (JSON.parse(detalle) as Record<string, unknown>)?.directo === true; } catch { return false; }
+}
+
+/** Correo de un paso del historial, en el lugar del correo original (con sus adjuntos en el visor). */
+function CorreoDelHistorial({ titulo, estado, onVolver }: {
+  titulo: string;
+  estado: { eventoId: number; cargando: boolean; correo?: CorreoEvento; error?: string };
+  onVolver: () => void;
+}) {
+  const { cargando, correo, error } = estado;
+  return (
+    <>
+      <section className="bg-white border border-[#1e3a5f]/25 rounded-xl shadow-sm ring-1 ring-[#1e3a5f]/5">
+        <div className="px-4 py-2.5 border-b border-gray-100 flex flex-wrap items-center gap-2">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#1e3a5f] flex items-center gap-1.5 min-w-0">
+            {correo?.direccion === "recibido" ? <Inbox className="w-3.5 h-3.5 shrink-0" /> : <Send className="w-3.5 h-3.5 shrink-0" />}
+            <span className="truncate">{titulo}</span>
+          </h3>
+          <button
+            type="button"
+            onClick={onVolver}
+            className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-[#1e3a5f] border border-[#1e3a5f]/30 rounded-md px-2.5 py-1 hover:bg-[#1e3a5f]/5"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Ver correo original
+          </button>
+        </div>
+
+        {cargando && (
+          <div className="px-4 py-10 flex items-center justify-center gap-2 text-sm text-gray-500">
+            <Loader2 className="w-4 h-4 animate-spin" /> Cargando correo…
+          </div>
+        )}
+
+        {!cargando && error && (
+          <div className="px-4 py-6 text-sm text-gray-600 flex gap-2">
+            <Mail className="w-4 h-4 mt-0.5 text-gray-400 shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
+
+        {!cargando && correo && (
+          <>
+            <dl className="px-4 py-3 border-b border-gray-100 grid grid-cols-[64px_1fr] gap-x-3 gap-y-1 text-sm">
+              <dt className="text-gray-400">De</dt>
+              <dd className="text-gray-800 break-all">{correo.de ?? "—"}</dd>
+              <dt className="text-gray-400">Para</dt>
+              <dd className="text-gray-800 break-all">{correo.para ?? "—"}</dd>
+              <dt className="text-gray-400">Fecha</dt>
+              <dd className="text-gray-800">{formatoFecha(correo.fecha, true)}</dd>
+              <dt className="text-gray-400">Asunto</dt>
+              <dd className="text-gray-900 font-semibold">{correo.asunto ?? <span className="font-normal italic text-gray-400">No guardado</span>}</dd>
+            </dl>
+            {correo.aviso && (
+              <p className="mx-4 mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{correo.aviso}</p>
+            )}
+            <div className="px-4 py-4 text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+              {correo.cuerpo || <span className="italic text-gray-400">Sin texto en el cuerpo del correo.</span>}
+            </div>
+          </>
+        )}
+      </section>
+
+      {!cargando && correo && correo.adjuntos.length > 0 && (
+        <VisorArchivos key={`evento-${estado.eventoId}`} adjuntos={correo.adjuntos} />
+      )}
+    </>
+  );
+}
+
 function ColorEvento(tipo: TipoEvento): string {
   if (tipo === "anulacion" || tipo === "error_envio") return "bg-gray-400";
   if (tipo === "respuesta_remitente") return "bg-green-500";
@@ -104,11 +177,35 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
   // Recordatorio manual / correo adicional / respuesta directa
   const [recordAsunto, setRecordAsunto] = useState("");
   const [recordCuerpo, setRecordCuerpo] = useState("");
-  const [adicionalDestino, setAdicionalDestino] = useState<"remitente" | "dependencia">("remitente");
+  // "remitente" o "dep:<id>" (la dependencia asignada u otra cualquiera).
+  const [adicionalDestino, setAdicionalDestino] = useState<string>("remitente");
   const [adicionalAsunto, setAdicionalAsunto] = useState("");
   const [adicionalCuerpo, setAdicionalCuerpo] = useState("");
 
-  useEffect(() => { setAccion(null); window.scrollTo({ top: 0, behavior: "smooth" }); }, [c.id]);
+  // Correo de un paso del historial que se está viendo en lugar del correo original.
+  const [correoSel, setCorreoSel] = useState<
+    { eventoId: number; cargando: boolean; correo?: CorreoEvento; error?: string } | null
+  >(null);
+  const columnaCorreoRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setAccion(null); setCorreoSel(null); window.scrollTo({ top: 0, behavior: "smooth" }); }, [c.id]);
+
+  const verCorreo = async (e: EventoCom) => {
+    if (correoSel?.eventoId === e.id) { setCorreoSel(null); return; }
+    setCorreoSel({ eventoId: e.id, cargando: true });
+    // En pantallas angostas el historial queda debajo: se sube hasta el correo.
+    if (window.matchMedia("(max-width: 1279px)").matches) {
+      columnaCorreoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    try {
+      const correo = await apiCorreoDeEvento(c.id, e.id);
+      setCorreoSel(prev => (prev?.eventoId === e.id ? { eventoId: e.id, cargando: false, correo } : prev));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "No se pudo cargar el correo";
+      setCorreoSel(prev => (prev?.eventoId === e.id ? { eventoId: e.id, cargando: false, error: msg } : prev));
+    }
+  };
+  const eventoSel = correoSel ? c.eventos.find(x => x.id === correoSel.eventoId) ?? null : null;
 
   const dep = dependencias.find(d => d.id === c.dependencia_id) ?? null;
   const puede = (hacia: Comunicacion["estado"]) => TRANSICIONES[c.estado].includes(hacia);
@@ -193,13 +290,17 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
         toast.success("Recordatorio enviado");
       } else if (accion === "adicional") {
         if (!adicionalCuerpo.trim()) { toast.error("Escribe el mensaje"); return; }
+        const depDestino = adicionalDestino.startsWith("dep:") ? Number(adicionalDestino.slice(4)) : null;
         await apiCorreoAdicional(c.id, {
-          destinatario_tipo: adicionalDestino,
+          destinatario_tipo: depDestino ? "dependencia" : "remitente",
+          ...(depDestino ? { dependencia_id: depDestino } : {}),
           asunto: adicionalAsunto,
           cuerpo: adicionalCuerpo,
           adjuntos: adjSel,
         });
-        toast.success("Correo adicional enviado");
+        toast.success("Correo adicional enviado", depDestino
+          ? { description: `A ${dependencias.find(d => d.id === depDestino)?.nombre ?? "la dependencia"}` }
+          : undefined);
       } else if (accion === "anular") {
         if (!motivo.trim()) { toast.error("El motivo es obligatorio"); return; }
         const r = await apiAnularComunicacion(c.id, motivo);
@@ -345,7 +446,15 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
 
       {/* ── Cuerpo: correo + adjuntos | datos + historial ──────────────── */}
       <div className="grid gap-5 xl:grid-cols-5 items-start">
-        <div className="xl:col-span-3 space-y-5 min-w-0">
+        <div ref={columnaCorreoRef} className="xl:col-span-3 space-y-5 min-w-0 scroll-mt-24">
+          {correoSel && eventoSel ? (
+            <CorreoDelHistorial
+              titulo={EVENTO_LABEL[eventoSel.tipo] ?? eventoSel.tipo}
+              estado={correoSel}
+              onVolver={() => setCorreoSel(null)}
+            />
+          ) : (
+          <>
           {/* Correo original */}
           <section className="bg-white border border-gray-200 rounded-xl shadow-sm">
             <h3 className="px-4 py-3 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
@@ -371,7 +480,9 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
           </section>
 
           {/* Adjuntos con visor (se ajusta al ancho de la columna) */}
-          <VisorArchivos adjuntos={c.adjuntos} />
+          <VisorArchivos key="original" adjuntos={c.adjuntos} />
+          </>
+          )}
         </div>
 
         <div className="xl:col-span-2 space-y-5 min-w-0">
@@ -390,20 +501,46 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
 
           {/* Historial */}
           <section className="bg-white border border-gray-200 rounded-xl shadow-sm">
-            <h3 className="px-4 py-3 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Historial</h3>
-            <ol className="relative border-l-2 border-gray-100 ml-6 my-4 mr-4 space-y-5">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Historial</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">Haga clic en un paso con <Mail className="inline w-3 h-3 -mt-0.5" /> para ver su correo.</p>
+            </div>
+            <ol className="relative border-l-2 border-gray-100 ml-6 my-4 mr-4 space-y-3">
               {[...c.eventos].reverse().map((e: EventoCom) => {
                 const texto = textoDetalle(e.detalle);
-                return (
-                  <li key={e.id} className="ml-4">
-                    <span className={`absolute -left-[7px] mt-1 w-3 h-3 rounded-full border-2 border-white ${ColorEvento(e.tipo)}`} />
+                const conCorreo = EVENTOS_CON_CORREO.has(e.tipo) && !(e.tipo === "respuesta_dependencia" && esDirecta(e.detalle));
+                const seleccionado = correoSel?.eventoId === e.id;
+                const contenido = (
+                  <>
                     <p className="text-[11px] text-gray-400">{formatoFecha(e.creado_en, true)}</p>
-                    <p className="text-sm font-semibold text-gray-800">
-                      {EVENTO_LABEL[e.tipo] ?? e.tipo}{e.dependencia ? ` · ${e.dependencia}` : ""}
+                    <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                      {conCorreo && <Mail className={`w-3.5 h-3.5 shrink-0 ${seleccionado ? "text-[#1e3a5f]" : "text-gray-400"}`} />}
+                      <span className="min-w-0">{EVENTO_LABEL[e.tipo] ?? e.tipo}{e.dependencia ? ` · ${e.dependencia}` : ""}</span>
+                      {conCorreo && <ChevronRight className={`w-4 h-4 ml-auto shrink-0 transition-transform ${seleccionado ? "text-[#1e3a5f] rotate-90 xl:rotate-180" : "text-gray-300"}`} />}
                     </p>
                     <p className="text-xs text-gray-500">{e.usuario ?? "Sistema (n8n)"}</p>
                     {texto && (
-                      <p className="mt-1.5 text-xs text-gray-600 whitespace-pre-line bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">{texto}</p>
+                      <p className="mt-1.5 text-xs text-gray-600 whitespace-pre-line bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 line-clamp-4">{texto}</p>
+                    )}
+                  </>
+                );
+                return (
+                  <li key={e.id} className="ml-4">
+                    <span className={`absolute -left-[7px] mt-3 w-3 h-3 rounded-full border-2 border-white ${ColorEvento(e.tipo)}`} />
+                    {conCorreo ? (
+                      <button
+                        type="button"
+                        onClick={() => verCorreo(e)}
+                        aria-pressed={seleccionado}
+                        title={seleccionado ? "Volver al correo original" : "Ver el correo de este paso"}
+                        className={`w-full text-left rounded-lg px-2.5 py-2 border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1e3a5f]/40 ${
+                          seleccionado ? "bg-[#1e3a5f]/5 border-[#1e3a5f]/30" : "border-transparent hover:bg-gray-50 hover:border-gray-200"
+                        }`}
+                      >
+                        {contenido}
+                      </button>
+                    ) : (
+                      <div className="px-2.5 py-2">{contenido}</div>
                     )}
                   </li>
                 );
@@ -563,10 +700,19 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
                   <select
                     className="w-full border rounded-md px-3 py-2 text-sm bg-white"
                     value={adicionalDestino}
-                    onChange={e => setAdicionalDestino(e.target.value as "remitente" | "dependencia")}
+                    onChange={e => setAdicionalDestino(e.target.value)}
                   >
                     <option value="remitente">{c.remitente_nombre ?? c.remitente_correo} (remitente)</option>
-                    <option value="dependencia">{dep?.nombre ?? "Dependencia"} ({dep?.correo_oficial ?? "sin correo"})</option>
+                    {dep && (
+                      <option value={`dep:${dep.id}`}>{dep.nombre} — {dep.correo_oficial || "sin correo"} (asignada)</option>
+                    )}
+                    <optgroup label="Otra dependencia">
+                      {dependencias.filter(d => d.id !== dep?.id).map(d => (
+                        <option key={d.id} value={`dep:${d.id}`} disabled={!d.correo_oficial}>
+                          {d.nombre} — {d.correo_oficial || "sin correo"}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                 </div>
                 <div className="space-y-1.5">
