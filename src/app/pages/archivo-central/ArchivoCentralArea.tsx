@@ -17,6 +17,12 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../components/ui/sheet";
 import { ComunicacionesArea, type SeccionComunicaciones } from "../comunicaciones/ComunicacionesArea";
+import { CentroDeCargas } from "./CentroDeCargas";
+import { Transferencias, type TipoEntrega } from "./Transferencias";
+import { Inicio } from "./Inicio";
+import { PorClasificar } from "./PorClasificar";
+import { Clasificados } from "./Clasificados";
+import { Archivo } from "./Archivo";
 
 type SeccionKey =
   | "inicio" | "centro-cargas" | "transferencias" | "por-clasificar" | "clasificados"
@@ -37,25 +43,25 @@ interface MenuGroup {
 }
 
 const menuGroups: MenuGroup[] = [
-  { title: "General", items: [{ key: "inicio", label: "Inicio", icon: Home }] },
+  { title: "General", items: [{ key: "inicio", label: "Inicio", icon: Home, disponible: true }] },
   {
     title: "Ingreso",
     items: [
-      { key: "centro-cargas", label: "Centro de cargas", icon: Upload },
-      { key: "transferencias", label: "Transferencias", icon: Truck },
+      { key: "centro-cargas", label: "Centro de cargas", icon: Upload, disponible: true },
+      { key: "transferencias", label: "Transferencias", icon: Truck, disponible: true },
     ],
   },
   {
     title: "Bandejas",
     items: [
-      { key: "por-clasificar", label: "Por clasificar", icon: Inbox },
-      { key: "clasificados", label: "Clasificados", icon: FolderCheck },
+      { key: "por-clasificar", label: "Por clasificar", icon: Inbox, disponible: true },
+      { key: "clasificados", label: "Clasificados", icon: FolderCheck, disponible: true },
     ],
   },
   {
     title: "Consulta",
     items: [
-      { key: "archivo", label: "Archivo", icon: Archive },
+      { key: "archivo", label: "Archivo", icon: Archive, disponible: true },
       { key: "buscar", label: "Buscar", icon: Search },
       { key: "historias", label: "Historias académicas", icon: GraduationCap },
     ],
@@ -113,18 +119,28 @@ function Proximamente({ item }: { item: MenuItem }) {
 
 export function ArchivoCentralArea() {
   const { usuario } = useAuth();
-  const [seccion, setSeccion] = useState<SeccionKey>("bandeja");
+  const [seccion, setSeccion] = useState<SeccionKey>("inicio");
   const [colapsado, setColapsado] = useState(false);
   const [menuMovil, setMenuMovil] = useState(false);
+  /** Tipo de entrega con el que se abre el asistente de Transferencias (viene de Centro de cargas B/C). */
+  const [tipoTransferencia, setTipoTransferencia] = useState<TipoEntrega | undefined>();
 
   const areaNombre = usuario?.dependencyName ?? "Archivo Central";
   const usuarioNombre = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ") || "Usuario";
   const actual = todosLosItems.find(i => i.key === seccion)!;
 
+  /** Navega a una sección. Siempre limpia el tipo de transferencia: así el menú lleva a la lista. */
   const elegir = (key: SeccionKey) => {
+    setTipoTransferencia(undefined);
     setSeccion(key);
     setMenuMovil(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  /** Desde Centro de cargas (B o C): abre Transferencias con el asistente ya iniciado. */
+  const irATransferencias = (tipo: TipoEntrega) => {
+    elegir("transferencias");
+    setTipoTransferencia(tipo); // va después de elegir(): gana este valor
   };
 
   /** Lista de opciones del menú (se usa en el lateral de escritorio y en el panel de celular). */
@@ -254,6 +270,19 @@ export function ArchivoCentralArea() {
             seccion={seccionCom}
             onSeccionChange={s => setSeccion(desdeComunicaciones[s])}
           />
+        ) : seccion === "centro-cargas" ? (
+          <CentroDeCargas onIrATransferencias={irATransferencias} />
+        ) : seccion === "transferencias" ? (
+          // La key remonta el componente cuando cambia el tipo, para que abra el asistente o la lista según corresponda.
+          <Transferencias key={tipoTransferencia ?? "lista"} tipoInicial={tipoTransferencia} />
+        ) : seccion === "inicio" ? (
+          <Inicio onIrA={elegir} />
+        ) : seccion === "por-clasificar" ? (
+          <PorClasificar onCargarLote={() => elegir("centro-cargas")} />
+        ) : seccion === "clasificados" ? (
+          <Clasificados onCargarLote={() => elegir("centro-cargas")} />
+        ) : seccion === "archivo" ? (
+          <Archivo onCargarLote={() => elegir("centro-cargas")} />
         ) : (
           <Proximamente item={actual} />
         )}
