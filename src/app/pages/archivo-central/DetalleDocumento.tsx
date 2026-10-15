@@ -4,18 +4,19 @@
  * Visor del PDF, ruta en el archivo, ficha de datos y acciones (anular, descargar, editar).
  * Mismo estilo que Comunicaciones › Bandeja. Aún no llama al backend (ver los TODO).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Ban, ChevronLeft, ChevronRight, Download, FileText, FolderOpen, Pencil,
 } from "lucide-react";
+import { apiDescargarArchivo } from "../../lib/comunicacionesApi";
 
 export type TipoDocumento = "Entrada" | "Salida" | "Interno";
 
 export interface DocumentoDetalle {
   consecutivo: string; // "194/2024"
   fecha: string;
-  tipo: TipoDocumento;
+  tipo: TipoDocumento | null;
   titulo: string;
   dependencia: string;
   anio: number;
@@ -37,8 +38,16 @@ const panel = "rounded-xl border border-[rgba(30,58,95,0.09)] bg-white shadow-sm
 const input =
   "h-8 w-full rounded-md border border-[rgba(30,58,95,0.15)] bg-white px-2 text-sm font-semibold text-[#2c3e50] focus:border-[#e8740e] focus:outline-none focus:ring-2 focus:ring-[#e8740e]/30";
 
-/* ───────────────────── Visor (marcador de posición) ───────────────────── */
-function Visor({ archivo, paginas }: { archivo: string; paginas: number }) {
+/* ───────────────────── Visor del PDF ───────────────────── */
+function Visor({ archivo, paginas, url, cargando, error, onDescargar }: {
+  archivo: string;
+  paginas: number;
+  /** URL (blob) del PDF real; null = aún no hay archivo conectado. */
+  url: string | null;
+  cargando: boolean;
+  error: string | null;
+  onDescargar: () => void;
+}) {
   const [pagina, setPagina] = useState(1);
   return (
     <section className={`${panel} flex h-full flex-col overflow-hidden`}>
@@ -52,32 +61,81 @@ function Visor({ archivo, paginas }: { archivo: string; paginas: number }) {
         <button aria-label="Página siguiente" disabled={pagina >= paginas} onClick={() => setPagina(p => p + 1)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40">
           <ChevronRight className="h-4 w-4" />
         </button>
-        <button
-          aria-label="Descargar PDF"
-          onClick={() => toast.info("La descarga estará disponible cuando esté conectado al almacenamiento")}
-          className="rounded p-1 hover:bg-white/10"
-        >
+        <button aria-label="Descargar PDF" onClick={onDescargar} className="rounded p-1 hover:bg-white/10">
           <Download className="h-4 w-4" />
         </button>
       </div>
-      <div className="flex flex-1 flex-col bg-[#ede6d8] p-6">
-        {/* TODO: reemplazar por el visor del PDF real (por ejemplo un <iframe> con la URL del archivo). */}
-        <div className="flex min-h-[460px] flex-1 flex-col items-center justify-center gap-2 rounded bg-white p-6 text-center shadow-sm">
-          <FileText className="h-10 w-10 text-[#6b7a8d]" />
-          <p className="text-sm font-semibold text-[#2c3e50]">Vista previa de la página {pagina}</p>
-          <p className="text-xs text-[#6b7a8d]">Aquí se mostrará el documento cuando esté conectado al almacenamiento.</p>
-        </div>
+      <div className="flex flex-1 flex-col bg-[#ede6d8] p-3">
+        {url ? (
+          <iframe
+            title={archivo}
+            src={`${url}#page=${pagina}&view=FitH`}
+            className="min-h-[640px] w-full flex-1 rounded bg-white shadow-sm"
+          />
+        ) : (
+          <div className="flex min-h-[460px] flex-1 flex-col items-center justify-center gap-2 rounded bg-white p-6 text-center shadow-sm">
+            <FileText className="h-10 w-10 text-[#6b7a8d]" />
+            {cargando ? (
+              <p className="text-sm font-semibold text-[#2c3e50]">Cargando el documento…</p>
+            ) : error ? (
+              <>
+                <p className="text-sm font-semibold text-red-700">No se pudo abrir el PDF</p>
+                <p className="text-xs text-[#6b7a8d]">{error}</p>
+              </>
+            ) : (
+              <p className="text-sm font-semibold text-[#2c3e50]">Vista previa de la página {pagina}</p>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );
 }
 
 /* ───────────────────── Componente ───────────────────── */
-export function DetalleDocumento({ documento, onVolver, onAbrirCarpeta }: {
+export function DetalleDocumento({ documento, archivoId, textoVolver = "Volver al archivo", onVolver, onAbrirCarpeta }: {
   documento: DocumentoDetalle;
+  /** Id del archivo en el almacenamiento; si viene, se muestra y descarga el PDF real. */
+  archivoId?: string;
+  textoVolver?: string;
   onVolver: () => void;
   onAbrirCarpeta?: () => void;
 }) {
+  const [urlPdf, setUrlPdf] = useState<string | null>(null);
+  const [cargandoPdf, setCargandoPdf] = useState(!!archivoId);
+  const [errorPdf, setErrorPdf] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!archivoId) return;
+    let cancelado = false;
+    let objetoUrl: string | null = null;
+    setCargandoPdf(true);
+    setErrorPdf(null);
+    apiDescargarArchivo(archivoId)
+      .then(({ blob }) => {
+        if (cancelado) return;
+        objetoUrl = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+        setUrlPdf(objetoUrl);
+      })
+      .catch(e => { if (!cancelado) setErrorPdf(e instanceof Error ? e.message : "No se pudo descargar el archivo"); })
+      .finally(() => { if (!cancelado) setCargandoPdf(false); });
+    return () => {
+      cancelado = true;
+      if (objetoUrl) URL.revokeObjectURL(objetoUrl);
+    };
+  }, [archivoId]);
+
+  const descargar = () => {
+    if (!urlPdf) {
+      toast.info(cargandoPdf ? "El documento todavía se está cargando" : "Este documento no tiene un archivo disponible");
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = urlPdf;
+    a.download = documento.archivo;
+    a.click();
+  };
+
   const [doc, setDoc] = useState(documento);
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState({ contraparte: "", persona: "", caja: "", carpeta: "" });
@@ -113,7 +171,7 @@ export function DetalleDocumento({ documento, onVolver, onAbrirCarpeta }: {
 
   const filas: [string, React.ReactNode][] = [
     ["Consecutivo", `${numero} / ${doc.anio}`],
-    ["Tipo", doc.tipo],
+    ["Tipo", doc.tipo ?? "—"],
     ["Fecha", doc.fecha],
     ["Dependencia", doc.dependencia],
     ["Asunto", doc.asunto],
@@ -142,11 +200,11 @@ export function DetalleDocumento({ documento, onVolver, onAbrirCarpeta }: {
           onClick={onVolver}
           className="mb-4 inline-flex items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.09)] bg-white px-3 py-1.5 text-xs font-semibold text-[#6b7a8d] shadow-sm transition-colors hover:bg-[#f3ede1] hover:text-[#1e3a5f]"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Volver al archivo
+          <ArrowLeft className="h-3.5 w-3.5" /> {textoVolver}
         </button>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-[#c89b14]">{doc.tipo} · {doc.dependencia}</p>
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-[#c89b14]">{doc.tipo ?? "Documento"} · {doc.dependencia}</p>
             <h2 className="flex items-center gap-2 text-xl font-bold text-[#1e3a5f]">
               <FileText className="h-6 w-6 text-[#e8740e]" />
               No. {numero} · {doc.fecha}
@@ -175,7 +233,7 @@ export function DetalleDocumento({ documento, onVolver, onAbrirCarpeta }: {
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Visor archivo={doc.archivo} paginas={doc.paginas} />
+        <Visor archivo={doc.archivo} paginas={doc.paginas} url={urlPdf} cargando={cargandoPdf} error={errorPdf} onDescargar={descargar} />
 
         <div className="space-y-4">
           {/* ── Ruta en el archivo ──────────────────────────────────────── */}
@@ -219,7 +277,7 @@ export function DetalleDocumento({ documento, onVolver, onAbrirCarpeta }: {
             ) : (
               <>
                 <button
-                  onClick={() => toast.info("La descarga estará disponible cuando esté conectado al almacenamiento")}
+                  onClick={descargar}
                   className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-4 text-sm font-semibold text-[#1e3a5f] hover:bg-[#f3ede1]"
                 >
                   <Download className="h-4 w-4" /> Descargar PDF

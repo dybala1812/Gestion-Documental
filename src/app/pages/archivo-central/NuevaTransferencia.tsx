@@ -5,18 +5,18 @@
  * Por ahora el paso 1 está completo; los pasos 2 y 3 son estructura base (ver TODO).
  * Regla de los dos años: en 2026 se transfiere hasta 2024; en 2027, hasta 2025.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FuidInventario, resumenFuid, type FilaFuid } from "./FuidInventario";
 import { RevisionActa } from "./RevisionActa";
 import { useAuth } from "../../context/AuthContext";
 import {
-  ArrowLeft, ArrowRight, Check, CalendarCheck, CalendarX, Save, X,
+  ArrowLeft, ArrowRight, Check, CalendarCheck, CalendarX, Loader2, Save, X,
 } from "lucide-react";
 import type { TipoEntrega } from "./Transferencias";
+import { transferenciasApi } from "../../services/archivoCentralApi";
 
 /* ───────────────────────── Datos de ejemplo (luego, catálogos de la API) ───────────────────────── */
-const DEPENDENCIAS = ["Dirección Administrativa", "Rectoría", "Mercadeo", "Talento Humano", "Registro Académico"];
 const CONTENIDOS = ["Documentos de gestión", "Historias académicas", "Contratos", "Actas"];
 const ANIO_ACTUAL = new Date().getFullYear();
 const ANIO_MAXIMO = ANIO_ACTUAL - 2; // regla de los dos años
@@ -67,6 +67,8 @@ export function NuevaTransferencia({
 }: { onVolver: () => void; tipoInicial?: TipoEntrega }) {
   const { usuario } = useAuth();
   const recibe = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ") || "Archivo Central";
+  const [dependencias, setDependencias] = useState<string[]>([]);
+  const [registrando, setRegistrando] = useState(false);
   const [paso, setPaso] = useState(1);
   const [tipo, setTipo] = useState<TipoEntrega>(tipoInicial);
   const [datos, setDatos] = useState<Datos>({
@@ -87,16 +89,41 @@ export function NuevaTransferencia({
     (paso === 2 && filas.length > 0 && fuid.errores === 0) ||
     paso === 3;
 
+  // Las dependencias salen de la base de datos (las mismas del módulo de Comunicaciones).
+  useEffect(() => {
+    transferenciasApi.resumen()
+      .then(r => setDependencias(r.dependencias))
+      .catch(() => toast.error("No se pudieron cargar las dependencias. ¿Está encendido el backend?"));
+  }, []);
+
   const guardarBorrador = () => {
-    // TODO: guardar `tipo`, `datos` y el FUID en el backend con estado "Borrador".
-    toast.success("Borrador guardado");
-    onVolver();
+    // TODO: guardar borradores en el servidor (requiere permitir `codigo` vacío en la tabla transferencia).
+    toast.info("Por ahora los borradores no se guardan en el servidor. Registra la transferencia al terminar.");
   };
 
-  const enviar = () => {
-    // TODO: crear la transferencia (código TR-AAAA-NNN), validar el FUID y registrar auditoría.
-    toast.success("Transferencia registrada");
-    onVolver();
+  const enviar = async () => {
+    setRegistrando(true);
+    try {
+      const r = await transferenciasApi.crear({
+        dependencia: datos.dependencia,
+        anio: Number(datos.anio),
+        tipo,
+        contenido: datos.contenido,
+        responsable: datos.responsable.trim(),
+        ubicacion: pideUbicacion ? datos.ubicacion.trim() : "",
+        carpetas: filas.map(f => ({
+          caja: f.caja.trim(), carpeta: f.carpeta.trim(), asunto: f.asunto.trim(),
+          fechaInicial: f.fechaInicial, fechaFinal: f.fechaFinal,
+          folios: Number(f.folios), docs: Number(f.docs), descripcion: f.descripcion.trim(),
+        })),
+      });
+      toast.success(`Transferencia registrada: ${r.codigo}`);
+      onVolver(); // la lista se recarga sola y muestra la nueva
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo registrar la transferencia");
+    } finally {
+      setRegistrando(false);
+    }
   };
 
   return (
@@ -155,7 +182,7 @@ export function NuevaTransferencia({
               <Campo label="Dependencia que entrega" requerido>
                 <select className={campo} value={datos.dependencia} onChange={set("dependencia")}>
                   <option value="">Selecciona…</option>
-                  {DEPENDENCIAS.map(d => <option key={d}>{d}</option>)}
+                  {dependencias.map(d => <option key={d}>{d}</option>)}
                 </select>
               </Campo>
               <Campo label="Contenido" requerido>
@@ -253,7 +280,7 @@ export function NuevaTransferencia({
           datos={datos}
           tipo={tipo}
           filas={filas}
-          codigo={`TR-${ANIO_ACTUAL}-005`} // TODO: lo asigna el backend al registrar la transferencia
+          codigo={`TR-${ANIO_ACTUAL}-___`} // el código definitivo lo asigna el servidor al registrar
           recibe={recibe}
         />
       )}
@@ -280,8 +307,10 @@ export function NuevaTransferencia({
           ) : (
             <button
               onClick={enviar}
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#e8740e] px-4 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+              disabled={registrando}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#e8740e] px-4 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
+              {registrando && <Loader2 className="h-4 w-4 animate-spin" />}
               Registrar transferencia
             </button>
           )}

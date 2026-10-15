@@ -1,37 +1,49 @@
 /**
  * @file PorClasificar.tsx
  * @description Archivo Central › Bandejas › Por clasificar (Ingreso · Bandeja 1).
- * Documentos que llegaron por transferencia y aún no tienen asunto, año ni ubicación.
- * Los datos son de EJEMPLO: se reemplazan por la API.
+ * Datos reales: GET /api/documentos?estado=por_clasificar.
+ * OJO: guardar la clasificación desde ClasificarDocumento aún no se persiste (siguiente etapa).
  */
-import { useState } from "react";
-import { FileText, Inbox, Play, Upload } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FileText, Inbox, Loader2, Play, RefreshCw, Upload } from "lucide-react";
 import { ClasificarDocumento, type DocumentoPendiente } from "./ClasificarDocumento";
-
-const DOCUMENTOS_EJEMPLO: DocumentoPendiente[] = [
-  ...[["SG-2024-001", 2], ["SG-2024-002", 3], ["SG-2024-003", 6], ["SG-2024-004", 4], ["SG-2024-005", 1]].map(
-    ([n, p]): DocumentoPendiente => ({
-      id: String(n), nombre: `${n}.pdf`, dependencia: "Secretaría General", anio: 2024,
-      origen: "Transferencia TR-2025-002", fechaCarga: "2 mar 2026", paginas: Number(p),
-    }),
-  ),
-  ...[["MER-2024-001", 2], ["MER-2024-002", 5], ["MER-2024-003", 1]].map(
-    ([n, p]): DocumentoPendiente => ({
-      id: String(n), nombre: `${n}.pdf`, dependencia: "Mercadeo", anio: 2024,
-      origen: "Transferencia TR-2025-003", fechaCarga: "2 mar 2026", paginas: Number(p),
-    }),
-  ),
-];
+import { apiListDocumentos } from "../../lib/documentosApi";
+import { formatoFecha } from "../../lib/comunicacionesApi";
 
 const select =
   "h-10 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 text-sm text-[#2c3e50] focus:border-[#e8740e] focus:outline-none focus:ring-2 focus:ring-[#e8740e]/30";
 
 export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
-  const [documentos, setDocumentos] = useState<DocumentoPendiente[]>(DOCUMENTOS_EJEMPLO);
+  const [documentos, setDocumentos] = useState<DocumentoPendiente[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [recarga, setRecarga] = useState(0);
   const [dependencia, setDependencia] = useState("");
   const [origen, setOrigen] = useState("");
   /** Índice (dentro de `documentos`) del documento que se está clasificando; null = se ve la lista. */
   const [clasificando, setClasificando] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    setCargando(true);
+    setError(null);
+    apiListDocumentos("por_clasificar")
+      .then(datos => {
+        if (cancelado) return;
+        setDocumentos(datos.map((d): DocumentoPendiente => ({
+          id: String(d.id),
+          nombre: d.archivo_nombre ?? d.titulo,
+          dependencia: d.dependencia,
+          anio: d.anio,
+          origen: d.origen ?? "Documento individual",
+          fechaCarga: d.cargado_en ? formatoFecha(d.cargado_en.slice(0, 10)) : "—",
+          paginas: d.paginas ?? 1,
+        })));
+      })
+      .catch(e => { if (!cancelado) setError(e instanceof Error ? e.message : "No se pudieron cargar los documentos"); })
+      .finally(() => { if (!cancelado) setCargando(false); });
+    return () => { cancelado = true; };
+  }, [recarga]);
 
   if (clasificando !== null) {
     return (
@@ -39,7 +51,7 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
         documentos={documentos}
         indiceInicial={clasificando}
         onClasificado={id => setDocumentos(prev => prev.filter(d => d.id !== id))}
-        onVolver={() => setClasificando(null)}
+        onVolver={() => { setClasificando(null); setRecarga(n => n + 1); }}
       />
     );
   }
@@ -64,6 +76,12 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
           <p className="mt-0.5 text-sm text-[#6b7a8d]">Llegaron por transferencia y todavía no tienen asunto, año ni ubicación.</p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setRecarga(n => n + 1)} aria-label="Refrescar"
+            className="inline-flex h-10 items-center rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 text-[#6b7a8d] hover:bg-[#f3ede1] hover:text-[#1e3a5f]"
+          >
+            <RefreshCw className={`h-4 w-4 ${cargando ? "animate-spin" : ""}`} />
+          </button>
           {onCargarLote && (
             <button
               onClick={onCargarLote}
@@ -92,11 +110,26 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
           <option value="">Todos los orígenes</option>
           {origenes.map(o => <option key={o}>{o}</option>)}
         </select>
-        <span className="text-xs text-[#6b7a8d]">{visibles.length} documento(s)</span>
+        <span className="text-xs text-[#6b7a8d]">{cargando ? "Cargando…" : `${visibles.length} documento(s)`}</span>
       </div>
 
-      {/* ── Tabla ───────────────────────────────────────────────────────── */}
-      {visibles.length === 0 ? (
+      {/* ── Contenido ───────────────────────────────────────────────────── */}
+      {error ? (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-6 py-8 text-center">
+          <p className="text-sm font-bold text-red-800">No se pudieron cargar los documentos</p>
+          <p className="mt-1 text-xs text-red-700">{error}</p>
+          <button
+            onClick={() => setRecarga(n => n + 1)}
+            className="mt-3 h-9 rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 hover:bg-red-100"
+          >
+            Reintentar
+          </button>
+        </div>
+      ) : cargando && documentos.length === 0 ? (
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-[rgba(30,58,95,0.09)] bg-white py-12 text-sm text-[#6b7a8d] shadow-sm">
+          <Loader2 className="h-4 w-4 animate-spin" /> Cargando documentos…
+        </div>
+      ) : visibles.length === 0 ? (
         <div className="rounded-xl border border-[rgba(30,58,95,0.09)] bg-white px-6 py-12 text-center text-sm text-[#6b7a8d] shadow-sm">
           No hay documentos por clasificar.
         </div>

@@ -1,52 +1,17 @@
 /**
  * @file Clasificados.tsx
  * @description Archivo Central › Bandejas › Clasificados (Ingreso · Bandeja 2).
- * Documentos ya clasificados: consecutivo, tipo, datos, ruta · TRD y ubicación física.
- * Los datos son de EJEMPLO: se reemplazan por la API. "Abrir PDF" aún no abre el archivo (ver TODO).
+ * Datos reales desde el backend SGD (GET /api/clasificados). La búsqueda y el filtro por dependencia
+ * se resuelven en el servidor. "Abrir PDF" abre la pantalla de detalle con el visor (GET /api/archivos/{id}).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { FileText, FolderCheck, Search, Upload } from "lucide-react";
+import { FileText, FolderCheck, Loader2, RefreshCw, Search, Upload } from "lucide-react";
+import { DetalleDocumento, type DocumentoDetalle } from "./DetalleDocumento";
+import { apiListClasificados, type Clasificado, type TipoClasificado } from "../../lib/clasificadosApi";
+import { apiListDependenciasCom, formatoFecha, type DependenciaCom } from "../../lib/comunicacionesApi";
 
-type Tipo = "Entrada" | "Salida" | "Interno";
-
-interface Clasificado {
-  consecutivo: string;
-  fecha: string;
-  tipo: Tipo;
-  titulo: string;
-  origen: string;
-  dependencia: string;
-  anio: number;
-  asunto: string;
-  trd: string;
-  caja: number;
-  carpeta: number;
-}
-
-const fila = (
-  consecutivo: string, fecha: string, tipo: Tipo, titulo: string, origen: string,
-  dependencia: string, asunto: string, trd: string, caja: number, carpeta: number,
-): Clasificado => ({ consecutivo, fecha, tipo, titulo, origen, dependencia, anio: 2024, asunto, trd, caja, carpeta });
-
-const CLASIFICADOS: Clasificado[] = [
-  fila("20/2024", "8 ene 2024", "Entrada", "Resolución de calendario académico 2024-2", "sdsd", "Secretaría General", "Resoluciones", "110.01", 3, 3),
-  fila("194/2024", "20 dic 2024", "Salida", "Informe a Consejo Superior", "Cámara de Comercio del Cauca", "Rectoría", "Informes de gestión", "100.03", 36, 4),
-  fila("230/2024", "10 dic 2024", "Interno", "Invitación a evento institucional", "Gestión Documental", "Gestión Documental", "Comunicaciones", "140.02", 36, 2),
-  fila("412/2024", "8 dic 2024", "Entrada", "Resolución de calendario académico", "Colciencias", "Secretaría General", "Resoluciones", "110.01", 21, 2),
-  fila("411/2024", "6 dic 2024", "Entrada", "Remisión de documentos", "Alcaldía de Popayán", "Mercadeo", "Comunicaciones", "120.02", 9, 1),
-  fila("410/2024", "3 dic 2024", "Entrada", "Solicitud de información", "Contraloría Departamental", "Rectoría", "Comunicaciones", "100.02", 15, 6),
-  fila("229/2024", "1 dic 2024", "Interno", "Contrato de prestación de servicios", "Mercadeo", "Mercadeo", "Contratos", "120.03", 4, 6),
-  fila("409/2024", "25 nov 2024", "Entrada", "Soporte de nómina mensual", "Ministerio de Educación Nacional", "Talento Humano", "Nómina", "160.01", 19, 4),
-  fila("407/2024", "7 nov 2024", "Entrada", "Solicitud de certificación", "Ministerio de Educación Nacional", "Registro Académico", "Comunicaciones", "150.02", 3, 3),
-];
-
-const DEPENDENCIAS = [
-  "Rectoría", "Secretaría General", "Mercadeo", "Dirección Administrativa",
-  "Gestión Documental", "Registro Académico", "Talento Humano", "Financiera",
-];
-
-const PILDORA_TIPO: Record<Tipo, string> = {
+const PILDORA_TIPO: Record<TipoClasificado, string> = {
   Entrada: "bg-blue-50 text-blue-700 border-blue-200",
   Salida: "bg-violet-50 text-violet-700 border-violet-200",
   Interno: "bg-slate-100 text-slate-600 border-slate-200",
@@ -55,22 +20,80 @@ const PILDORA_TIPO: Record<Tipo, string> = {
 const control =
   "h-10 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white text-sm text-[#2c3e50] focus:border-[#e8740e] focus:outline-none focus:ring-2 focus:ring-[#e8740e]/30";
 
+function etiquetaEstado(estado: string) {
+  const t = estado.replace(/_/g, " ");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/** Adapta un clasificado del backend a la ficha de la pantalla de detalle. */
+function aDetalle(c: Clasificado): DocumentoDetalle {
+  return {
+    consecutivo: c.consecutivo ?? `— / ${c.anio}`,
+    fecha: c.fecha ? formatoFecha(c.fecha) : "Sin fecha",
+    tipo: c.tipo,
+    titulo: c.titulo,
+    dependencia: c.dependencia,
+    anio: c.anio,
+    asunto: c.asunto ?? "Sin asunto",
+    trd: c.trd ?? "—",
+    contraparte: c.contraparte ?? "—",
+    persona: "—",
+    caja: c.caja ?? "—",
+    carpeta: c.carpeta ?? "—",
+    archivo: c.archivo_nombre ?? c.titulo,
+    paginas: c.paginas ?? 1,
+    origen: etiquetaEstado(c.origen ?? "—"),
+    estado: c.estado === "anulado" ? "Anulado" : "Clasificado",
+  };
+}
+
 export function Clasificados({ onCargarLote }: { onCargarLote?: () => void }) {
   const [busqueda, setBusqueda] = useState("");
-  const [dependencia, setDependencia] = useState("");
+  const [busquedaAplicada, setBusquedaAplicada] = useState("");
+  const [dependenciaId, setDependenciaId] = useState("");
+  const [dependencias, setDependencias] = useState<DependenciaCom[]>([]);
+  const [items, setItems] = useState<Clasificado[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [recarga, setRecarga] = useState(0);
+  /** Documento abierto en la vista de detalle (visor del PDF + ficha); null = se ve la lista. */
+  const [abierto, setAbierto] = useState<Clasificado | null>(null);
 
-  const q = busqueda.trim().toLowerCase();
-  const visibles = CLASIFICADOS.filter(c => {
-    if (dependencia && c.dependencia !== dependencia) return false;
-    if (!q) return true;
-    return [c.consecutivo, c.titulo, c.origen, c.dependencia, c.asunto, c.trd, c.tipo]
-      .some(v => v.toLowerCase().includes(q));
-  });
+  // Dependencias reales para el filtro.
+  useEffect(() => {
+    apiListDependenciasCom().then(setDependencias).catch(() => setDependencias([]));
+  }, []);
 
-  const abrirPdf = (c: Clasificado) => {
-    // TODO: abrir el PDF real (URL firmada del almacenamiento) en una pestaña nueva.
-    toast.info(`El PDF de ${c.consecutivo} se abrirá cuando esté conectado al almacenamiento`);
-  };
+  // La búsqueda se envía al servidor medio segundo después de que se deja de escribir.
+  useEffect(() => {
+    const t = setTimeout(() => setBusquedaAplicada(busqueda.trim()), 400);
+    return () => clearTimeout(t);
+  }, [busqueda]);
+
+  useEffect(() => {
+    let cancelado = false;
+    setCargando(true);
+    setError(null);
+    apiListClasificados({
+      q: busquedaAplicada || undefined,
+      dependencia_id: dependenciaId ? Number(dependenciaId) : undefined,
+    })
+      .then(datos => { if (!cancelado) setItems(datos); })
+      .catch(e => { if (!cancelado) setError(e instanceof Error ? e.message : "No se pudieron cargar los clasificados"); })
+      .finally(() => { if (!cancelado) setCargando(false); });
+    return () => { cancelado = true; };
+  }, [busquedaAplicada, dependenciaId, recarga]);
+
+  if (abierto) {
+    return (
+      <DetalleDocumento
+        documento={aDetalle(abierto)}
+        archivoId={abierto.archivo_id}
+        textoVolver="Volver a clasificados"
+        onVolver={() => setAbierto(null)}
+      />
+    );
+  }
 
   const th = "px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-[#2c3e50]";
 
@@ -88,14 +111,23 @@ export function Clasificados({ onCargarLote }: { onCargarLote?: () => void }) {
             Con su consecutivo, tipo, datos y la ruta donde quedaron. El PDF se abre desde aquí.
           </p>
         </div>
-        {onCargarLote && (
+        <div className="flex gap-2">
           <button
-            onClick={onCargarLote}
-            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-4 text-sm font-semibold text-[#1e3a5f] hover:bg-[#f3ede1]"
+            onClick={() => setRecarga(n => n + 1)}
+            aria-label="Refrescar"
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 text-sm font-semibold text-[#6b7a8d] hover:bg-[#f3ede1] hover:text-[#1e3a5f]"
           >
-            <Upload className="h-4 w-4" /> Cargar lote
+            <RefreshCw className={`h-4 w-4 ${cargando ? "animate-spin" : ""}`} />
           </button>
-        )}
+          {onCargarLote && (
+            <button
+              onClick={onCargarLote}
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-4 text-sm font-semibold text-[#1e3a5f] hover:bg-[#f3ede1]"
+            >
+              <Upload className="h-4 w-4" /> Cargar lote
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Búsqueda y filtro ───────────────────────────────────────────── */}
@@ -113,20 +145,35 @@ export function Clasificados({ onCargarLote }: { onCargarLote?: () => void }) {
         </div>
         <select
           className={`${control} px-3`}
-          value={dependencia}
-          onChange={e => setDependencia(e.target.value)}
+          value={dependenciaId}
+          onChange={e => setDependenciaId(e.target.value)}
           aria-label="Filtrar por dependencia"
         >
           <option value="">Todas las dependencias</option>
-          {DEPENDENCIAS.map(d => <option key={d}>{d}</option>)}
+          {dependencias.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
         </select>
       </div>
-      <p className="-mt-3 text-xs text-[#6b7a8d]">{visibles.length} documento(s)</p>
+      <p className="-mt-3 text-xs text-[#6b7a8d]">{cargando ? "Cargando…" : `${items.length} documento(s)`}</p>
 
-      {/* ── Tabla ───────────────────────────────────────────────────────── */}
-      {visibles.length === 0 ? (
+      {/* ── Contenido ───────────────────────────────────────────────────── */}
+      {error ? (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-6 py-8 text-center">
+          <p className="text-sm font-bold text-red-800">No se pudieron cargar los documentos</p>
+          <p className="mt-1 text-xs text-red-700">{error}</p>
+          <button
+            onClick={() => setRecarga(n => n + 1)}
+            className="mt-3 h-9 rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 hover:bg-red-100"
+          >
+            Reintentar
+          </button>
+        </div>
+      ) : cargando && items.length === 0 ? (
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-[rgba(30,58,95,0.09)] bg-white py-12 text-sm text-[#6b7a8d] shadow-sm">
+          <Loader2 className="h-4 w-4 animate-spin" /> Cargando documentos…
+        </div>
+      ) : items.length === 0 ? (
         <div className="rounded-xl border border-[rgba(30,58,95,0.09)] bg-white px-6 py-12 text-center text-sm text-[#6b7a8d] shadow-sm">
-          Ningún documento coincide con la búsqueda.
+          {busquedaAplicada || dependenciaId ? "Ningún documento coincide con la búsqueda." : "Aún no hay documentos clasificados."}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[rgba(30,58,95,0.09)] bg-white shadow-sm">
@@ -139,35 +186,40 @@ export function Clasificados({ onCargarLote }: { onCargarLote?: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {visibles.map(c => (
-                <tr key={c.consecutivo} className="border-t border-[rgba(30,58,95,0.09)] hover:bg-[#f3ede1]/40">
+              {items.map(c => (
+                <tr key={c.id} className="border-t border-[rgba(30,58,95,0.09)] hover:bg-[#f3ede1]/40">
                   <td className="whitespace-nowrap px-4 py-3">
-                    <p className="font-mono text-xs font-bold text-[#2c3e50]">{c.consecutivo}</p>
-                    <p className="text-[11px] text-[#6b7a8d]">{c.fecha}</p>
+                    <p className="font-mono text-xs font-bold text-[#2c3e50]">{c.consecutivo ?? "—"}</p>
+                    <p className="text-[11px] text-[#6b7a8d]">{c.fecha ? formatoFecha(c.fecha) : "Sin fecha"}</p>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
-                    <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold ${PILDORA_TIPO[c.tipo]}`}>{c.tipo}</span>
+                    {c.tipo ? (
+                      <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold ${PILDORA_TIPO[c.tipo]}`}>{c.tipo}</span>
+                    ) : "—"}
                   </td>
                   <td className="px-4 py-3">
                     <p className="text-sm font-semibold text-[#2c3e50]">{c.titulo}</p>
-                    <p className="text-xs text-[#6b7a8d]">{c.origen}</p>
+                    {c.contraparte && <p className="text-xs text-[#6b7a8d]">{c.contraparte}</p>}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
-                    <p className="text-sm font-medium text-[#1e3a5f]">{c.dependencia} / {c.anio} / {c.asunto}</p>
-                    <p className="text-[11px] text-[#6b7a8d]">TRD {c.trd}</p>
+                    <p className="text-sm font-medium text-[#1e3a5f]">{c.dependencia} / {c.anio} / {c.asunto ?? "Sin asunto"}</p>
+                    <p className="text-[11px] text-[#6b7a8d]">{c.trd ? `TRD ${c.trd}` : "Sin TRD"}</p>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm text-[#6b7a8d]">Caja {c.caja} · Carpeta {c.carpeta}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-[#6b7a8d]">
+                    Caja {c.caja ?? "—"} · Carpeta {c.carpeta ?? "—"}
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <span className="inline-block rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                      Clasificado
+                      {etiquetaEstado(c.estado)}
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <button
-                      onClick={() => abrirPdf(c)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 py-1.5 text-xs font-semibold text-[#1e3a5f] hover:bg-[#f3ede1]"
+                      onClick={() => setAbierto(c)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 py-1.5 text-xs font-semibold text-[#1e3a5f] hover:bg-[#f3ede1] "
                     >
-                      <FileText className="h-3.5 w-3.5" /> Abrir PDF
+                      <FileText className="h-3.5 w-3.5" />
+                      Abrir PDF
                     </button>
                   </td>
                 </tr>
