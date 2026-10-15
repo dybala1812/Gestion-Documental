@@ -4,16 +4,16 @@
  * Asistente de 4 pasos: Destino y datos → Archivos → Vista previa → Confirmar.
  * Mismo estilo que Comunicaciones › Bandeja. Por ahora no llama al backend (ver TODO en `crearLote`).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { apiListDependenciasCom, type DependenciaCom } from "../../lib/comunicacionesApi";
+import { apiCrearDocumento, apiListAsuntos, type AsuntoCat } from "../../lib/documentosApi";
 import {
   AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, FileInput, FileText,
   Info, Loader2, UploadCloud, X, XCircle,
 } from "lucide-react";
 
 /* ───────────────────────── Datos de ejemplo (luego, catálogos de la API) ───────────────────────── */
-const DEPENDENCIAS = ["Rectoría", "Vicerrectoría Académica", "Registro Académico", "Mercadeo", "Talento Humano"];
-const ASUNTOS = ["Comunicaciones", "Actas", "Contratos", "Resoluciones", "Historias académicas"];
 const TIPOS = ["Entrada", "Salida", "Interno"];
 const ANIO_ACTUAL = new Date().getFullYear();
 const ANIOS = Array.from({ length: ANIO_ACTUAL - 1989 }, (_, i) => ANIO_ACTUAL - i);
@@ -89,16 +89,37 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
   const [archivos, setArchivos] = useState<File[]>([]);
   const [arrastrando, setArrastrando] = useState(false);
   const [creando, setCreando] = useState(false);
+  const [dependencias, setDependencias] = useState<DependenciaCom[]>([]);
+  const [asuntos, setAsuntos] = useState<AsuntoCat[]>([]);
+
+  useEffect(() => {
+    apiListDependenciasCom().then(setDependencias).catch(() => toast.error("No se pudieron cargar las dependencias"));
+  }, []);
+
+  // Al cambiar la dependencia se cargan sus asuntos y se limpia el asunto elegido.
+  useEffect(() => {
+    setAsuntos([]);
+    setDatos(d => (d.asunto ? { ...d, asunto: "" } : d));
+    if (!datos.dependencia) return;
+    let cancelado = false;
+    apiListAsuntos(Number(datos.dependencia))
+      .then(a => { if (!cancelado) setAsuntos(a); })
+      .catch(() => toast.error("No se pudieron cargar los asuntos"));
+    return () => { cancelado = true; };
+  }, [datos.dependencia]);
+
+  const nombreDependencia = dependencias.find(d => String(d.id) === datos.dependencia)?.nombre ?? "";
+  const nombreAsunto = asuntos.find(a => String(a.id) === datos.asunto)?.nombre ?? "";
 
   const set = (k: keyof Datos) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setDatos(d => ({ ...d, [k]: e.target.value }));
 
   const agregar = (lista: FileList | null) => {
     if (!lista) return;
-    setArchivos(prev => {
-      const nuevos = Array.from(lista).filter(f => !prev.some(p => p.name === f.name && p.size === f.size));
-      return [...prev, ...nuevos];
-    });
+    // Se copia a un arreglo AHORA: la lista del input se vacía al limpiar su valor y la de arrastrar
+    // deja de ser válida al terminar el evento; el updater de setState corre más tarde.
+    const recibidos = Array.from(lista);
+    setArchivos(prev => [...prev, ...recibidos.filter(f => !prev.some(p => p.name === f.name && p.size === f.size))]);
   };
 
   const resultados = archivos.map(f => evaluar(f, datos));
@@ -116,13 +137,37 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
 
   const crearLote = async () => {
     setCreando(true);
+    let guardados = 0;
+    let duplicados = 0;
+    const fallos: string[] = [];
     try {
-      // TODO: enviar `datos` y los archivos aceptados al backend (crea el lote, calcula SHA-256, registra auditoría).
-      await new Promise(r => setTimeout(r, 600));
-      toast.success(`Lote creado: ${aceptados} documento(s) aceptado(s)`);
-      onVolver();
-    } catch {
-      toast.error("No se pudo crear el lote");
+      for (const r of resultados) {
+        if (r.nivel === "rojo") continue;
+        try {
+          await apiCrearDocumento(r.archivo, {
+            dependencia_id: Number(datos.dependencia),
+            anio: Number(datos.anio),
+            asunto_id: datos.asunto ? Number(datos.asunto) : undefined,
+            tipo: datos.tipo,
+            consecutivo: datos.consecutivo.trim() || undefined,
+            fecha: datos.fecha || undefined,
+            caja: datos.caja.trim() || undefined,
+            carpeta: datos.carpeta.trim() || undefined,
+          });
+          guardados++;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Error desconocido";
+          if (/duplicad|ya fue cargado/i.test(msg)) duplicados++;
+          else fallos.push(`${r.archivo.name}: ${msg}`);
+        }
+      }
+      if (guardados > 0) {
+        toast.success(`${guardados} documento(s) cargado(s)` + (duplicados ? ` · ${duplicados} duplicado(s)` : ""));
+      } else if (duplicados > 0 && fallos.length === 0) {
+        toast.warning(`${duplicados} documento(s) ya estaban cargados`);
+      }
+      if (fallos.length > 0) toast.error(fallos[0] + (fallos.length > 1 ? ` (y ${fallos.length - 1} más)` : ""));
+      if (fallos.length === 0) onVolver();
     } finally {
       setCreando(false);
     }
@@ -183,7 +228,7 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
               <Campo label="Dependencia" requerido>
                 <select className={campo} value={datos.dependencia} onChange={set("dependencia")}>
                   <option value="">Selecciona…</option>
-                  {DEPENDENCIAS.map(d => <option key={d}>{d}</option>)}
+                  {dependencias.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
                 </select>
               </Campo>
               <Campo label="Año" requerido>
@@ -192,9 +237,9 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
                 </select>
               </Campo>
               <Campo label="Asunto">
-                <select className={campo} value={datos.asunto} onChange={set("asunto")}>
+                <select className={campo} value={datos.asunto} onChange={set("asunto")} disabled={!datos.dependencia}>
                   <option value="">Sin asunto · por clasificar</option>
-                  {ASUNTOS.map(a => <option key={a}>{a}</option>)}
+                  {asuntos.map(a => <option key={a.id} value={a.id}>{a.trd_codigo ? `${a.trd_codigo} · ` : ""}{a.nombre}</option>)}
                 </select>
               </Campo>
               <Campo label="Tipo" requerido>
@@ -291,8 +336,8 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
           <div className="space-y-4">
             <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm lg:grid-cols-4">
               {([
-                ["Dependencia", datos.dependencia], ["Año", datos.anio],
-                ["Asunto", datos.asunto || "Sin asunto · por clasificar"], ["Tipo", datos.tipo],
+                ["Dependencia", nombreDependencia], ["Año", datos.anio],
+                ["Asunto", nombreAsunto || "Sin asunto · por clasificar"], ["Tipo", datos.tipo],
                 ["Consecutivo", datos.consecutivo || "—"], ["Fecha", datos.fecha || "—"],
                 ["Caja", datos.caja || "—"], ["Carpeta", datos.carpeta || "—"],
               ] as const).map(([k, v]) => (

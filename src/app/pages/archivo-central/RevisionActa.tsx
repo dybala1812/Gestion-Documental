@@ -22,6 +22,10 @@ interface Props {
   codigo: string;
   /** Quien recibe en Archivo Central. */
   recibe: string;
+  /** Fecha de la transferencia (AAAA-MM-DD). Si no viene, el acta usa la fecha de hoy. */
+  fecha?: string;
+  /** En la pantalla de detalle los totales y las verificaciones se muestran aparte. */
+  ocultarResumen?: boolean;
 }
 
 /* ───────────────────────── Utilidades ───────────────────────── */
@@ -104,8 +108,29 @@ const BtnImprimir = ({ zona, children }: { zona: Zona; children: React.ReactNode
   </button>
 );
 
+/** Las cuatro verificaciones del inventario (se usan en el paso 3 y en el detalle). */
+export const verificaciones = (filas: FilaFuid[]) => calcular(filas).verificaciones;
+
+export function ListaVerificaciones({ items }: { items: { titulo: string; ok: boolean }[] }) {
+  return (
+    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {items.map(v => (
+        <li key={v.titulo} className="flex items-center gap-3 rounded-lg border border-[rgba(30,58,95,0.09)] bg-white px-4 py-3">
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white ${v.ok ? "bg-emerald-600" : "bg-amber-500"}`}>
+            {v.ok ? <Check className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-bold text-[#2c3e50]">{v.titulo}</span>
+            <span className="block text-xs text-[#6b7a8d]">{v.ok ? "Verificado en el inventario" : "Revisa el inventario"}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /* ───────────────────────── Componente ───────────────────────── */
-export function RevisionActa({ datos, tipo, filas, codigo, recibe }: Props) {
+export function RevisionActa({ datos, tipo, filas, codigo, recibe, fecha: fechaTransferencia, ocultarResumen }: Props) {
   const r = calcular(filas);
   const actaNo = `ACT-${codigo}`;
 
@@ -133,29 +158,19 @@ export function RevisionActa({ datos, tipo, filas, codigo, recibe }: Props) {
       <style>{CSS_IMPRESION}</style>
 
       {/* Totales */}
-      <dl className="grid grid-cols-2 divide-x divide-[rgba(30,58,95,0.12)] border-t-2 border-[#1e3a5f] bg-white/50 lg:grid-cols-4">
-        {([["Cajas", r.cajas.length], ["Carpetas", filas.length], ["Folios", r.folios], ["Documentos", r.docs]] as const).map(([k, v]) => (
-          <div key={k} className="px-5 py-4">
-            <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6b7a8d]">{k}</dt>
-            <dd className="text-3xl font-bold text-[#1e3a5f]">{v}</dd>
-          </div>
-        ))}
-      </dl>
+      {!ocultarResumen && (
+        <dl className="grid grid-cols-2 divide-x divide-[rgba(30,58,95,0.12)] border-t-2 border-[#1e3a5f] bg-white/50 lg:grid-cols-4">
+          {([["Cajas", r.cajas.length], ["Carpetas", filas.length], ["Folios", r.folios], ["Documentos", r.docs]] as const).map(([k, v]) => (
+            <div key={k} className="px-5 py-4">
+              <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6b7a8d]">{k}</dt>
+              <dd className="text-3xl font-bold text-[#1e3a5f]">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
       {/* Verificaciones */}
-      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {r.verificaciones.map(v => (
-          <li key={v.titulo} className="flex items-center gap-3 rounded-lg border border-[rgba(30,58,95,0.09)] bg-white px-4 py-3">
-            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white ${v.ok ? "bg-emerald-600" : "bg-amber-500"}`}>
-              {v.ok ? <Check className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-bold text-[#2c3e50]">{v.titulo}</span>
-              <span className="block text-xs text-[#6b7a8d]">{v.ok ? "Verificado en el inventario" : "Revisa el inventario"}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
+      {!ocultarResumen && <ListaVerificaciones items={r.verificaciones} />}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         {/* ── Acta de entrega ─────────────────────────────────────────── */}
@@ -172,7 +187,7 @@ export function RevisionActa({ datos, tipo, filas, codigo, recibe }: Props) {
               </header>
 
               <h4 className="mt-6 text-lg font-bold text-[#1e3a5f]">Acta de entrega de transferencia documental</h4>
-              <p className="mt-0.5 text-[11px] text-[#6b7a8d]">{hoy()} · Transferencia {codigo}</p>
+              <p className="mt-0.5 text-[11px] text-[#6b7a8d]">{fechaTransferencia ? fecha(fechaTransferencia) : hoy()} · Transferencia {codigo}</p>
               <p className="mt-4 text-xs leading-relaxed text-[#2c3e50]">
                 En la fecha, {datos.responsable || "—"} entrega al Archivo Central la transferencia de {datos.dependencia} correspondiente
                 al año {datos.anio}, ordenada por serie y subserie, en orden cronológico, foliada y descrita según el inventario adjunto.
