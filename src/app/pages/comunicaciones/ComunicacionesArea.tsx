@@ -7,7 +7,7 @@
  * Los datos vienen del backend SGD (Next.js) a través de lib/comunicacionesApi.ts.
  */
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { sileo } from "sileo";
 import { AlertTriangle, CalendarDays, Inbox, Loader2, Mail, MailQuestion, RefreshCw, Send } from "lucide-react";
 import {
   type Comunicacion, type CorreoSinAsociar, type DependenciaCom,
@@ -27,9 +27,20 @@ interface Props {
   /** Sección controlada desde el menú lateral de Archivo Central (opcional). */
   seccion?: Seccion;
   onSeccionChange?: (s: Seccion) => void;
+  /** Señal desde el padre para forzar una recarga de la bandeja. */
+  recargarTrigger?: number;
+  /** Devuelve el id de la comunicación más reciente tras cada carga. */
+  onUltimaComunicacionId?: (id: number) => void;
 }
 
-export function ComunicacionesArea({ areaNombre, usuarioNombre, seccion: seccionControlada, onSeccionChange }: Props) {
+export function ComunicacionesArea({
+  areaNombre,
+  usuarioNombre,
+  seccion: seccionControlada,
+  onSeccionChange,
+  recargarTrigger,
+  onUltimaComunicacionId,
+}: Props) {
   const [seccionLocal, setSeccionLocal] = useState<Seccion>(seccionControlada ?? "bandeja");
   const seccion = seccionControlada ?? seccionLocal;
   const setSeccion = (s: Seccion) => { setSeccionLocal(s); onSeccionChange?.(s); };
@@ -50,13 +61,24 @@ export function ComunicacionesArea({ areaNombre, usuarioNombre, seccion: seccion
       setCorreos(sinAsoc);
       setDependencias(deps);
     } catch {
-      toast.error("Error al cargar las comunicaciones");
+      sileo.error({ title: "Error al cargar las comunicaciones" });
     } finally {
       setCargando(false);
     }
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  useEffect(() => {
+    if (recargarTrigger) cargar();
+  }, [recargarTrigger, cargar]);
+
+  useEffect(() => {
+    const ultimaNueva = comunicaciones.find(c => c.estado === "nueva");
+    if (ultimaNueva?.id) {
+      onUltimaComunicacionId?.(ultimaNueva.id);
+    }
+  }, [comunicaciones, onUltimaComunicacionId]);
 
   const reemplazar = (c: Comunicacion, extra?: Comunicacion) => {
     setComunicaciones(prev => {
@@ -184,6 +206,7 @@ export function ComunicacionesArea({ areaNombre, usuarioNombre, seccion: seccion
                   reemplazar(com);
                 }
                 setAbierta(null);
+                cargar();
               }}
             />
           )}
