@@ -7,7 +7,7 @@
  * Por ahora usa datos de ejemplo; luego se conectan a la API del backend.
  */
 import { useState } from "react";
-import { toast } from "sonner";
+import { alertaCarga } from "../../lib/alertasCarga";
 import { NuevaCargaDocumento } from "./NuevaCargaDocumento";
 import { NuevaCargaHistorias } from "./NuevaCargaHistorias";
 import { NuevaCargaRegistro } from "./NuevaCargaRegistro";
@@ -179,7 +179,7 @@ export function CentroDeCargas({ onIrATransferencias }: CentroDeCargasProps) {
     if (id === "A" || id === "D" || id === "E") setCargaActiva(id);
     else if (id === "B") onIrATransferencias?.("fisica");
     else if (id === "C") onIrATransferencias?.("digital");
-    else toast.info(`La carga ${id} estará disponible pronto`);
+    else alertaCarga.info(`La carga ${id} estará disponible pronto`, "Por ahora puedes usar las cargas A, B, C, D y E.");
   };
 
   if (lote) return <LoteDetalle lote={lote} onVolver={() => setLote(null)} />;
