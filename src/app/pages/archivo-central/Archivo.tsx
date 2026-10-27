@@ -301,7 +301,19 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
                 </thead>
                 <tbody>
                   {visibles.map(x => (
-                    <tr key={x.consecutivo} className="border-t border-[rgba(30,58,95,0.09)] hover:bg-[#f3ede1]/40">
+                    // Toda la fila abre el documento, igual que el botón Abrir (SGD-088).
+                    <tr
+                      key={x.consecutivo}
+                      tabIndex={0}
+                      aria-label={`Abrir ${x.consecutivo}`}
+                      onClick={() => setAbierto(x)}
+                      onKeyDown={e => {
+                        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+                        e.preventDefault();
+                        setAbierto(x);
+                      }}
+                      className="cursor-pointer border-t border-[rgba(30,58,95,0.09)] hover:bg-[#f3ede1]/40 focus-visible:bg-[#f3ede1]/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#1e3a5f]"
+                    >
                       <td className="whitespace-nowrap px-4 py-3">
                         <p className="font-mono text-xs font-bold text-[#2c3e50]">{x.consecutivo}</p>
                         <p className="text-[11px] text-[#6b7a8d]">{x.fecha}</p>
@@ -320,7 +332,7 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
                         <button
-                          onClick={() => setAbierto(x)}
+                          onClick={e => { e.stopPropagation(); setAbierto(x); }}
                           className="inline-flex items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 py-1.5 text-xs font-semibold text-[#1e3a5f] hover:bg-[#f3ede1]"
                         >
                           <FileText className="h-3.5 w-3.5" /> Abrir
