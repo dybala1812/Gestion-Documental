@@ -23,6 +23,8 @@ export interface NuevoDocumento {
   fecha?: string;
   caja?: string;
   carpeta?: string;
+  /** Id del catálogo de ubicaciones físicas (opcional). */
+  ubicacion_id?: number;
 }
 
 export async function apiListAsuntos(dependenciaId: number): Promise<AsuntoCat[]> {

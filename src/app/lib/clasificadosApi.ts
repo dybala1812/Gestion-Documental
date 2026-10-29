@@ -8,6 +8,14 @@ import { sgdFetch } from "./sgdApi";
 
 export type TipoClasificado = "Entrada" | "Salida" | "Interno";
 
+/** Registro del catálogo de ubicaciones físicas (opcional, P-08). */
+export interface UbicacionBodega {
+  id: number;
+  bodega: string;
+  estante: string | null;
+  modulo: string | null;
+}
+
 export interface Clasificado {
   id: number;
   /** Ej. "194/2024". */
@@ -25,6 +33,8 @@ export interface Clasificado {
   trd: string | null;
   caja: string | null;
   carpeta: string | null;
+  /** Bodega · estante · módulo del catálogo, si el documento la tiene. */
+  ubicacion?: UbicacionBodega | null;
   origen: string | null;
   estado: string;
   archivo_id: string;

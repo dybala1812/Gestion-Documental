@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { VisorDocumento, guardarArchivoDescargado, useArchivoDocumento } from "./VisorDocumento";
+import { UBICACION_VACIA, UbicacionCampos, useUbicacionesActivas, type ValorUbicacion } from "./UbicacionFisica";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, Loader2, ScanText } from "lucide-react";
 
 export interface DocumentoPendiente {
@@ -34,11 +35,11 @@ const ASUNTOS_GENERICOS = ["Comunicaciones", "Actas", "Contratos", "Resoluciones
 
 interface Datos {
   tipo: string; consecutivo: string; dia: string; mes: string; anio: string;
-  asunto: string; remitente: string; recibio: string; caja: string; carpeta: string;
+  asunto: string; remitente: string; recibio: string; ubicacion: ValorUbicacion;
 }
 const datosIniciales = (d: DocumentoPendiente): Datos => ({
   tipo: TIPOS[0], consecutivo: "", dia: "", mes: "", anio: String(d.anio),
-  asunto: "", remitente: "", recibio: "", caja: "", carpeta: "",
+  asunto: "", remitente: "", recibio: "", ubicacion: UBICACION_VACIA,
 });
 
 const campo =
@@ -79,6 +80,7 @@ export function ClasificarDocumento({ documentos, indiceInicial, onClasificado, 
   const [indice, setIndice] = useState(indiceInicial);
   const [borradores, setBorradores] = useState<Record<string, Datos>>({});
   const [guardando, setGuardando] = useState(false);
+  const ubicaciones = useUbicacionesActivas();
 
   const doc = documentos[indice];
   if (!doc) return null;
@@ -88,7 +90,7 @@ export function ClasificarDocumento({ documentos, indiceInicial, onClasificado, 
     setBorradores(b => ({ ...b, [doc.id]: { ...datos, [k]: e.target.value } }));
 
   const asuntos = ASUNTOS[doc.dependencia] ?? ASUNTOS_GENERICOS;
-  const completo = !!(datos.asunto && datos.anio && datos.consecutivo.trim() && datos.caja.trim() && datos.carpeta.trim());
+  const completo = !!(datos.asunto && datos.anio && datos.consecutivo.trim() && datos.ubicacion.caja.trim() && datos.ubicacion.carpeta.trim());
 
   const guardar = async () => {
     // TODO: guardar `datos` del documento en el backend sin clasificarlo.
@@ -207,12 +209,12 @@ export function ClasificarDocumento({ documentos, indiceInicial, onClasificado, 
               <Campo label="Quién recibió" className="sm:col-span-2">
                 <input className={campo} placeholder="Funcionario" value={datos.recibio} onChange={set("recibio")} />
               </Campo>
-              <Campo label="Caja" requerido>
-                <input className={campo} placeholder="Ej. 12" value={datos.caja} onChange={set("caja")} />
-              </Campo>
-              <Campo label="Carpeta" requerido>
-                <input className={campo} placeholder="Ej. 3" value={datos.carpeta} onChange={set("carpeta")} />
-              </Campo>
+              <UbicacionCampos
+                requerido
+                valor={datos.ubicacion}
+                onChange={ubicacion => setBorradores(b => ({ ...b, [doc.id]: { ...datos, ubicacion } }))}
+                ubicaciones={ubicaciones}
+              />
             </div>
           </section>
 

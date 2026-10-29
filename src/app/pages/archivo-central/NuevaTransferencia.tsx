@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FuidInventario, resumenFuid, type FilaFuid } from "./FuidInventario";
 import { RevisionActa } from "./RevisionActa";
+import { SelectorBodega, textoBodega, useUbicacionesActivas } from "./UbicacionFisica";
 import { useAuth } from "../../context/AuthContext";
 import {
   ArrowLeft, ArrowRight, Check, CalendarCheck, CalendarX, Loader2, Save, X,
@@ -76,6 +77,8 @@ export function NuevaTransferencia({
   });
   const [filas, setFilas] = useState<FilaFuid[]>([]);
   const [fuidNombre, setFuidNombre] = useState("");
+  const [bodegaId, setBodegaId] = useState("");
+  const ubicaciones = useUbicacionesActivas();
 
   const set = (k: keyof Datos) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setDatos(d => ({ ...d, [k]: e.target.value }));
@@ -85,7 +88,7 @@ export function NuevaTransferencia({
   const fuid = resumenFuid(filas, Number(datos.anio));
 
   const puedeContinuar =
-    (paso === 1 && !!datos.dependencia && !!datos.responsable.trim() && anioPermitido && (!pideUbicacion || !!datos.ubicacion.trim())) ||
+    (paso === 1 && !!datos.dependencia && !!datos.responsable.trim() && anioPermitido) ||
     (paso === 2 && filas.length > 0 && fuid.errores === 0) ||
     paso === 3;
 
@@ -221,14 +224,19 @@ export function NuevaTransferencia({
             </div>
 
             {pideUbicacion && (
-              <Campo label="Ubicación física en Archivo Central" requerido>
-                <input
-                  className={campo}
-                  placeholder="Ej. Depósito 2 · Estante 4 (si se conoce)"
-                  value={datos.ubicacion}
-                  onChange={set("ubicacion")}
+              <div className="space-y-2">
+                <p className="text-xs text-[#6b7a8d]">
+                  La <strong>caja</strong> y la <strong>carpeta</strong> de cada documento se registran en el inventario FUID (paso 2).
+                </p>
+                <SelectorBodega
+                  valor={bodegaId}
+                  onChange={id => {
+                    setBodegaId(id);
+                    setDatos(d => ({ ...d, ubicacion: textoBodega(ubicaciones.find(u => String(u.id) === id)) }));
+                  }}
+                  ubicaciones={ubicaciones}
                 />
-              </Campo>
+              </div>
             )}
           </section>
 

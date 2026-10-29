@@ -150,7 +150,7 @@ export function RevisionActa({ datos, tipo, filas, codigo, recibe, fecha: fechaT
     ["Documentos en físico", String(fisico)],
     ["Documentos en digital", String(digital)],
     ["Archivos cargados a la nube", "0"],
-    ["Ubicación física", datos.ubicacion.trim() || "Por asignar"],
+    ["Ubicación en bodega", datos.ubicacion.trim() || "Sin asignar"],
   ];
 
   return (

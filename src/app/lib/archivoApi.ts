@@ -4,6 +4,7 @@
  * El backend aplica los permisos: un usuario de Dependencia solo recibe lo de su dependencia.
  */
 import { sgdFetch } from "./sgdApi";
+import type { UbicacionBodega } from "./clasificadosApi";
 
 export interface NodoAsunto { asunto_id: number; nombre: string; trd: string | null; total: number }
 export interface NodoAnio { anio: number; total: number; asuntos: NodoAsunto[] }
@@ -28,6 +29,8 @@ export interface ResultadoBusqueda {
   archivo_id: string | null;
   caja: string | null;
   carpeta: string | null;
+  /** Bodega · estante · módulo, cuando la búsqueda la devuelva (la función SQL aún no la incluye). */
+  ubicacion?: UbicacionBodega | null;
   estado: string | null;
 }
 

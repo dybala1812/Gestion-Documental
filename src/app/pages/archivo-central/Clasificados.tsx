@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FileText, FolderCheck, Loader2, RefreshCw, Search, Upload } from "lucide-react";
 import { DetalleDocumento, type DocumentoDetalle } from "./DetalleDocumento";
+import { textoUbicacion } from "./UbicacionFisica";
 import { apiListClasificados, type Clasificado, type TipoClasificado } from "../../lib/clasificadosApi";
 import { apiListDependenciasCom, formatoFecha, type DependenciaCom } from "../../lib/comunicacionesApi";
 import { Paginacion, usePaginacion } from "./Paginacion";
@@ -43,6 +44,7 @@ function aDetalle(c: Clasificado): DocumentoDetalle {
     persona: "—",
     caja: c.caja ?? "—",
     carpeta: c.carpeta ?? "—",
+    ubicacion: c.ubicacion ?? null,
     archivo: c.archivo_nombre ?? c.titulo,
     paginas: c.paginas ?? 1,
     origen: etiquetaEstado(c.origen ?? "—"),
@@ -225,7 +227,7 @@ export function Clasificados({ onCargarLote }: { onCargarLote?: () => void }) {
                     <p className="text-[11px] text-[#6b7a8d]">{c.trd ? `TRD ${c.trd}` : "Sin TRD"}</p>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-[#6b7a8d]">
-                    Caja {c.caja ?? "—"} · Carpeta {c.carpeta ?? "—"}
+                    {textoUbicacion(c)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <span className="inline-block rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">

@@ -49,6 +49,7 @@ function detalleDe(x: ResultadoBusqueda): DocumentoDetalle {
     persona: "—",
     caja: x.caja ?? "—",
     carpeta: x.carpeta ?? "—",
+    ubicacion: x.ubicacion ?? null,
     archivo: x.titulo,
     paginas: 1,
     origen: "—",

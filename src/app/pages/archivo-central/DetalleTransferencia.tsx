@@ -66,7 +66,7 @@ export function DetalleTransferencia({ id, onVolver }: { id: number; onVolver: (
     ["Dependencia", t.dependencia], ["Año transferido", String(t.anio)],
     ["Contenido", t.contenido || "Documentos"], ["Tipo de entrega", ETIQUETA_TIPO[t.tipo]],
     ["Responsable", t.responsable], ["Recibió", t.recibio || "—"],
-    ["Fecha de entrega", verFecha(t.fecha)], ["Ubicación física", t.ubicacion || "Por asignar"],
+    ["Fecha de entrega", verFecha(t.fecha)], ["Ubicación en bodega", t.ubicacion || "Sin asignar"],
   ];
   const th = "px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-white whitespace-nowrap";
 
