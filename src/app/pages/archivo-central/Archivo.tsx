@@ -1,75 +1,21 @@
 /**
  * @file Archivo.tsx
  * @description Archivo Central › Consulta › Archivo (repositorio histórico).
- * Carpetas virtuales Dependencia → Año → Asunto. Cada dependencia ya viene creada;
- * el asunto reemplaza la serie documental. Árbol a la izquierda y documentos de la carpeta a la derecha.
- * Los datos son de EJEMPLO: se reemplazan por la API. "Abrir PDF" aún no abre el archivo (ver TODO).
+ * Carpetas virtuales Dependencia → Año → Asunto con la cantidad de documentos clasificados de cada
+ * nodo (RF-AC-013). Árbol a la izquierda y documentos de la carpeta a la derecha, 20 por página.
+ * Los datos vienen del backend (GET /api/archivo/arbol y /api/archivo/buscar), que limita a un
+ * usuario de Dependencia a sus carpetas. Al abrir un documento se ve en el visor con su ficha.
  */
-import { useState } from "react";
-import { ChevronRight, FileText, Folder, FolderOpen, Search, Upload, Archive as ArchiveIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, FileText, Folder, FolderOpen, Loader2, RefreshCw, Search, Upload, Archive as ArchiveIcon } from "lucide-react";
 import { DetalleDocumento, type DocumentoDetalle } from "./DetalleDocumento";
+import { formatApiError } from "../../lib/api";
+import {
+  apiArbolArchivo, apiBuscarArchivo, TIPO_LEGIBLE,
+  type NodoDependencia, type PaginaBusqueda, type ResultadoBusqueda,
+} from "../../lib/archivoApi";
 
 type Tipo = "Entrada" | "Salida" | "Interno";
-
-interface Documento {
-  consecutivo: string;
-  fecha: string;
-  tipo: Tipo;
-  titulo: string;
-  dependencia: string;
-  anio: number;
-  asunto: string;
-  trd: string;
-}
-
-const d = (
-  consecutivo: string, fecha: string, tipo: Tipo, titulo: string,
-  dependencia: string, anio: number, asunto: string, trd: string,
-): Documento => ({ consecutivo, fecha, tipo, titulo, dependencia, anio, asunto, trd });
-
-/** Ordenados del más reciente al más antiguo. */
-const DOCUMENTOS: Documento[] = [
-  d("412/2024", "8 dic 2024", "Entrada", "Resolución de calendario académico", "Secretaría General", 2024, "Resoluciones", "110.01"),
-  d("228/2024", "24 oct 2024", "Interno", "Otrosí a convenio interinstitucional", "Secretaría General", 2024, "Convenios", "110.03"),
-  d("406/2024", "20 oct 2024", "Entrada", "Acta de Consejo Académico", "Secretaría General", 2024, "Actas", "110.04"),
-  d("403/2024", "4 sep 2024", "Entrada", "Circular de uso de espacios", "Secretaría General", 2024, "Circulares", "110.02"),
-  d("398/2024", "4 jul 2024", "Entrada", "Circular de cierre de semestre", "Secretaría General", 2024, "Circulares", "110.02"),
-  d("392/2024", "23 abr 2024", "Entrada", "Otrosí a convenio interinstitucional", "Secretaría General", 2024, "Convenios", "110.03"),
-  d("183/2024", "26 feb 2024", "Salida", "Otrosí a convenio interinstitucional", "Secretaría General", 2024, "Convenios", "110.03"),
-  d("382/2024", "19 ene 2024", "Entrada", "Acta de comité de rectoría", "Secretaría General", 2024, "Actas", "110.04"),
-  d("194/2024", "20 dic 2024", "Salida", "Informe a Consejo Superior", "Rectoría", 2024, "Informes de gestión", "100.03"),
-  d("410/2024", "3 dic 2024", "Entrada", "Solicitud de información", "Rectoría", 2024, "Comunicaciones", "100.02"),
-  d("301/2023", "12 nov 2023", "Salida", "Informe de gestión 2023", "Rectoría", 2023, "Informes de gestión", "100.03"),
-  d("118/2022", "9 mar 2022", "Interno", "Resolución rectoral de nombramiento", "Rectoría", 2022, "Resoluciones", "100.01"),
-  d("45/2019", "15 may 2019", "Entrada", "Solicitud de apoyo institucional", "Rectoría", 2019, "Comunicaciones", "100.02"),
-  d("411/2024", "6 dic 2024", "Entrada", "Remisión de documentos", "Mercadeo", 2024, "Comunicaciones", "120.02"),
-  d("229/2024", "1 dic 2024", "Interno", "Contrato de prestación de servicios", "Mercadeo", 2024, "Contratos", "120.03"),
-  d("230/2024", "10 dic 2024", "Interno", "Invitación a evento institucional", "Gestión Documental", 2024, "Comunicaciones", "140.02"),
-  d("409/2024", "25 nov 2024", "Entrada", "Soporte de nómina mensual", "Talento Humano", 2024, "Nómina", "160.01"),
-  d("407/2024", "7 nov 2024", "Entrada", "Solicitud de certificación", "Registro Académico", 2024, "Comunicaciones", "150.02"),
-];
-
-/** Datos extra del detalle (ejemplo). El resto de documentos usa valores por defecto. */
-const EXTRA: Record<string, Partial<DocumentoDetalle>> = {
-  "194/2024": {
-    contraparte: "Cámara de Comercio del Cauca", persona: "Marcela Ordóñez", caja: "36", carpeta: "4",
-    archivo: "194-2024-informe-a-consejo-superior.pdf", paginas: 4, origen: "Transferencia TR-2026-001",
-  },
-};
-
-function detalleDe(x: Documento): DocumentoDetalle {
-  return {
-    ...x, contraparte: "—", persona: "—", caja: "—", carpeta: "—",
-    archivo: `${x.consecutivo.replace("/", "-")}.pdf`, paginas: 1, origen: "—", estado: "Clasificado",
-    ...EXTRA[x.consecutivo],
-  };
-}
-
-/** Cada dependencia ya viene creada, aunque todavía no tenga documentos. */
-const DEPENDENCIAS = [
-  "Rectoría", "Secretaría General", "Mercadeo", "Dirección Administrativa",
-  "Gestión Documental", "Registro Académico", "Talento Humano", "Financiera",
-];
 
 const PILDORA_TIPO: Record<Tipo, string> = {
   Entrada: "bg-blue-50 text-blue-700 border-blue-200",
@@ -77,7 +23,40 @@ const PILDORA_TIPO: Record<Tipo, string> = {
   Interno: "bg-slate-100 text-slate-600 border-slate-200",
 };
 
-interface Seleccion { dep?: string; anio?: number; asunto?: string }
+const POR_PAGINA = 20;
+
+/** "2024-12-08" → "8 dic 2024" (al mediodía para que la zona horaria no cambie el día). */
+function fechaCorta(iso: string | null): string {
+  if (!iso) return "Sin fecha";
+  return new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
+}
+
+const consecutivoDe = (x: ResultadoBusqueda) =>
+  x.consecutivo ? (x.consecutivo.includes("/") ? x.consecutivo : `${x.consecutivo}/${x.anio}`) : `— / ${x.anio}`;
+
+/** Adapta un documento del backend a la ficha de la pantalla de detalle. */
+function detalleDe(x: ResultadoBusqueda): DocumentoDetalle {
+  return {
+    consecutivo: consecutivoDe(x),
+    fecha: fechaCorta(x.fecha),
+    tipo: x.tipo ? TIPO_LEGIBLE[x.tipo] : null,
+    titulo: x.titulo,
+    dependencia: x.dependencia ?? "—",
+    anio: x.anio,
+    asunto: x.asunto ?? "Sin asunto",
+    trd: x.trd ?? "—",
+    contraparte: x.contraparte ?? "—",
+    persona: "—",
+    caja: x.caja ?? "—",
+    carpeta: x.carpeta ?? "—",
+    archivo: x.titulo,
+    paginas: 1,
+    origen: "—",
+    estado: "Clasificado",
+  };
+}
+
+interface Seleccion { depId?: number; anio?: number; asuntoId?: number }
 
 /* ───────────────────────── Fila del árbol ───────────────────────── */
 function Fila({ nivel, etiqueta, cuenta, abierto, expandible, seleccionado, onToggle, onSelect }: {
@@ -130,11 +109,61 @@ function Fila({ nivel, etiqueta, cuenta, abierto, expandible, seleccionado, onTo
 
 /* ───────────────────────── Componente ───────────────────────── */
 export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
-  const [sel, setSel] = useState<Seleccion>({ dep: "Secretaría General" });
+  const [arbol, setArbol] = useState<NodoDependencia[] | null>(null);
+  const [errorArbol, setErrorArbol] = useState("");
+  const [sel, setSel] = useState<Seleccion>({});
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
   const [busqueda, setBusqueda] = useState("");
+  const [texto, setTexto] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [resultado, setResultado] = useState<PaginaBusqueda | null>(null);
+  const [cargandoDocs, setCargandoDocs] = useState(false);
+  const [errorDocs, setErrorDocs] = useState("");
+  const [recarga, setRecarga] = useState(0);
   /** Documento abierto (detalle); null = se ve el repositorio. */
-  const [abierto, setAbierto] = useState<Documento | null>(null);
+  const [abierto, setAbierto] = useState<ResultadoBusqueda | null>(null);
+
+  // Árbol con contadores.
+  useEffect(() => {
+    let vigente = true;
+    setErrorArbol("");
+    apiArbolArchivo()
+      .then((a) => {
+        if (!vigente) return;
+        setArbol(a);
+        // Primera vez: se abre la primera dependencia con documentos.
+        const primera = a.find((d) => d.total > 0) ?? a[0];
+        setSel((s) => (s.depId ? s : { depId: primera?.dependencia_id }));
+        setAbiertos((prev) => (prev.size || !primera ? prev : new Set([String(primera.dependencia_id)])));
+      })
+      .catch((e) => { if (vigente) setErrorArbol(formatApiError(e)); });
+    return () => { vigente = false; };
+  }, [recarga]);
+
+  // La búsqueda dentro de la carpeta espera a que se deje de escribir.
+  useEffect(() => {
+    const h = setTimeout(() => { setTexto(busqueda.trim()); setPagina(1); }, 350);
+    return () => clearTimeout(h);
+  }, [busqueda]);
+
+  const cargarDocumentos = useCallback(async () => {
+    setCargandoDocs(true);
+    setErrorDocs("");
+    try {
+      setResultado(await apiBuscarArchivo({
+        alcance: "documentos", dependencia_id: sel.depId, anio: sel.anio, asunto_id: sel.asuntoId, texto: texto || undefined,
+      }, pagina, POR_PAGINA));
+    } catch (e) {
+      setResultado(null);
+      setErrorDocs(formatApiError(e));
+    } finally {
+      setCargandoDocs(false);
+    }
+  }, [sel.depId, sel.anio, sel.asuntoId, texto, pagina]);
+
+  useEffect(() => { cargarDocumentos(); }, [cargarDocumentos, recarga]);
+
+  const elegir = (s: Seleccion) => { setSel(s); setPagina(1); };
 
   const alternar = (clave: string) =>
     setAbiertos(prev => {
@@ -143,34 +172,35 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
       return n;
     });
 
-  const delDep = (dep: string) => DOCUMENTOS.filter(x => x.dependencia === dep);
-  const anios = (dep: string) => [...new Set(delDep(dep).map(x => x.anio))].sort((a, b) => b - a);
-  const asuntos = (dep: string, anio: number) =>
-    [...new Set(delDep(dep).filter(x => x.anio === anio).map(x => x.asunto))].sort((a, b) => a.localeCompare(b, "es"));
-
-  const q = busqueda.trim().toLowerCase();
-  const visibles = DOCUMENTOS.filter(x => {
-    if (sel.dep && x.dependencia !== sel.dep) return false;
-    if (sel.anio !== undefined && x.anio !== sel.anio) return false;
-    if (sel.asunto && x.asunto !== sel.asunto) return false;
-    if (!q) return true;
-    return [x.consecutivo, x.titulo, x.asunto, x.trd, x.tipo].some(v => v.toLowerCase().includes(q));
-  });
+  const nodoDep = useMemo(() => arbol?.find((d) => d.dependencia_id === sel.depId), [arbol, sel.depId]);
+  const nodoAnio = nodoDep?.anios.find((y) => y.anio === sel.anio);
+  const nodoAsunto = nodoAnio?.asuntos.find((a) => a.asunto_id === sel.asuntoId);
 
   const ruta: { etiqueta: string; sel: Seleccion }[] = [{ etiqueta: "Archivo", sel: {} }];
-  if (sel.dep) ruta.push({ etiqueta: sel.dep, sel: { dep: sel.dep } });
-  if (sel.dep && sel.anio !== undefined) ruta.push({ etiqueta: String(sel.anio), sel: { dep: sel.dep, anio: sel.anio } });
-  if (sel.dep && sel.anio !== undefined && sel.asunto) ruta.push({ etiqueta: sel.asunto, sel });
+  if (nodoDep) ruta.push({ etiqueta: nodoDep.nombre, sel: { depId: nodoDep.dependencia_id } });
+  if (nodoDep && sel.anio !== undefined) ruta.push({ etiqueta: String(sel.anio), sel: { depId: nodoDep.dependencia_id, anio: sel.anio } });
+  if (nodoDep && sel.anio !== undefined && nodoAsunto) ruta.push({ etiqueta: nodoAsunto.nombre, sel });
+
+  const visibles = resultado?.filas ?? [];
+  const total = resultado?.total ?? 0;
+  const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
 
   if (abierto) {
     return (
       <DetalleDocumento
-        key={abierto.consecutivo}
+        key={abierto.id}
         documento={detalleDe(abierto)}
+        documentoId={abierto.id}
+        archivoId={abierto.archivo_id ?? undefined}
         onVolver={() => setAbierto(null)}
+        onAnulado={() => { setAbierto(null); setRecarga(n => n + 1); }}
         onAbrirCarpeta={() => {
-          setSel({ dep: abierto.dependencia, anio: abierto.anio, asunto: abierto.asunto });
-          setAbiertos(prev => new Set(prev).add(abierto.dependencia).add(`${abierto.dependencia}|${abierto.anio}`));
+          const dep = arbol?.find((d) => d.dependencia_id === abierto.dependencia_id);
+          const asunto = dep?.anios.find((y) => y.anio === abierto.anio)?.asuntos.find((a) => a.nombre === abierto.asunto);
+          if (dep) {
+            elegir({ depId: dep.dependencia_id, anio: abierto.anio, asuntoId: asunto?.asunto_id });
+            setAbiertos(prev => new Set(prev).add(String(dep.dependencia_id)).add(`${dep.dependencia_id}|${abierto.anio}`));
+          }
           setAbierto(null);
         }}
       />
@@ -193,6 +223,14 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
             Carpetas virtuales por Dependencia → Año → Asunto. Cada dependencia ya viene creada; el asunto reemplaza la serie documental.
           </p>
         </div>
+        <div className="flex items-center gap-2">
+        <button
+          onClick={() => setRecarga(n => n + 1)}
+          aria-label="Actualizar"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[rgba(30,58,95,0.15)] bg-white text-[#1e3a5f] hover:bg-[#f3ede1]"
+        >
+          <RefreshCw className={`h-4 w-4 ${cargandoDocs ? "animate-spin" : ""}`} />
+        </button>
         {onCargarLote && (
           <button
             onClick={onCargarLote}
@@ -201,6 +239,7 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
             <Upload className="h-4 w-4" /> Cargar lote
           </button>
         )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
@@ -210,39 +249,45 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
             Dependencia → Año → Asunto
           </p>
           <div className="max-h-[640px] overflow-y-auto">
-            {DEPENDENCIAS.map(dep => {
-              const total = delDep(dep).length;
-              const abierto = abiertos.has(dep);
+            {errorArbol ? (
+              <p className="px-4 py-6 text-sm text-red-600">No se pudo cargar el árbol: {errorArbol}</p>
+            ) : !arbol ? (
+              <p className="flex items-center gap-2 px-4 py-6 text-sm text-[#6b7a8d]"><Loader2 className="h-4 w-4 animate-spin" /> Cargando carpetas…</p>
+            ) : arbol.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-[#6b7a8d]">No hay dependencias para mostrar.</p>
+            ) : arbol.map(dep => {
+              const claveDep = String(dep.dependencia_id);
+              const abiertoDep = abiertos.has(claveDep);
               return (
-                <div key={dep}>
+                <div key={claveDep}>
                   <Fila
-                    nivel={0} etiqueta={dep} cuenta={total} abierto={abierto} expandible={total > 0}
-                    seleccionado={sel.dep === dep && sel.anio === undefined}
-                    onToggle={() => alternar(dep)}
-                    onSelect={() => setSel({ dep })}
+                    nivel={0} etiqueta={dep.nombre} cuenta={dep.total} abierto={abiertoDep} expandible={dep.total > 0}
+                    seleccionado={sel.depId === dep.dependencia_id && sel.anio === undefined}
+                    onToggle={() => alternar(claveDep)}
+                    onSelect={() => elegir({ depId: dep.dependencia_id })}
                   />
-                  {abierto && anios(dep).map(anio => {
-                    const claveAnio = `${dep}|${anio}`;
+                  {abiertoDep && dep.anios.map(y => {
+                    const claveAnio = `${claveDep}|${y.anio}`;
                     const abiertoAnio = abiertos.has(claveAnio);
                     return (
                       <div key={claveAnio}>
                         <Fila
-                          nivel={1} etiqueta={String(anio)}
-                          cuenta={delDep(dep).filter(x => x.anio === anio).length}
+                          nivel={1} etiqueta={String(y.anio)}
+                          cuenta={y.total}
                           abierto={abiertoAnio} expandible
-                          seleccionado={sel.dep === dep && sel.anio === anio && !sel.asunto}
+                          seleccionado={sel.depId === dep.dependencia_id && sel.anio === y.anio && !sel.asuntoId}
                           onToggle={() => alternar(claveAnio)}
-                          onSelect={() => setSel({ dep, anio })}
+                          onSelect={() => elegir({ depId: dep.dependencia_id, anio: y.anio })}
                         />
-                        {abiertoAnio && asuntos(dep, anio).map(asunto => (
+                        {abiertoAnio && y.asuntos.map(a => (
                           <Fila
-                            key={`${claveAnio}|${asunto}`}
-                            nivel={2} etiqueta={asunto}
-                            cuenta={delDep(dep).filter(x => x.anio === anio && x.asunto === asunto).length}
+                            key={`${claveAnio}|${a.asunto_id}`}
+                            nivel={2} etiqueta={a.trd ? `${a.nombre} · ${a.trd}` : a.nombre}
+                            cuenta={a.total}
                             abierto={false} expandible={false}
-                            seleccionado={sel.dep === dep && sel.anio === anio && sel.asunto === asunto}
+                            seleccionado={sel.depId === dep.dependencia_id && sel.anio === y.anio && sel.asuntoId === a.asunto_id}
                             onToggle={() => {}}
-                            onSelect={() => setSel({ dep, anio, asunto })}
+                            onSelect={() => elegir({ depId: dep.dependencia_id, anio: y.anio, asuntoId: a.asunto_id })}
                           />
                         ))}
                       </div>
@@ -263,7 +308,7 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
                 <span key={r.etiqueta + i} className="flex items-center gap-1.5">
                   {i > 0 && <span className="text-[#6b7a8d]">/</span>}
                   {i < ruta.length - 1 ? (
-                    <button onClick={() => setSel(r.sel)} className="text-[#6b7a8d] hover:text-[#1e3a5f] hover:underline">
+                    <button onClick={() => elegir(r.sel)} className="text-[#6b7a8d] hover:text-[#1e3a5f] hover:underline">
                       {r.etiqueta}
                     </button>
                   ) : (
@@ -272,7 +317,7 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
                 </span>
               ))}
             </nav>
-            <span className="text-xs text-[#6b7a8d]">{visibles.length} documento(s)</span>
+            <span className="text-xs text-[#6b7a8d]">{total} documento(s)</span>
           </div>
 
           <div className="relative">
@@ -287,11 +332,16 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
             />
           </div>
 
-          {visibles.length === 0 ? (
+          {errorDocs ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-8 text-center text-sm text-red-700">{errorDocs}</div>
+          ) : cargandoDocs && !resultado ? (
+            <p className="flex items-center justify-center gap-2 py-12 text-sm text-[#6b7a8d]"><Loader2 className="h-4 w-4 animate-spin" /> Cargando documentos…</p>
+          ) : visibles.length === 0 ? (
             <div className="rounded-xl border border-[rgba(30,58,95,0.09)] bg-white px-6 py-12 text-center text-sm text-[#6b7a8d] shadow-sm">
-              Esta carpeta no tiene documentos{q ? " que coincidan con la búsqueda" : ""}.
+              Esta carpeta no tiene documentos{texto ? " que coincidan con la búsqueda" : ""}.
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto rounded-xl border border-[rgba(30,58,95,0.09)] bg-white shadow-sm">
               <table className="w-full min-w-[620px] border-collapse">
                 <thead>
@@ -303,9 +353,9 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
                   {visibles.map(x => (
                     // Toda la fila abre el documento, igual que el botón Abrir (SGD-088).
                     <tr
-                      key={x.consecutivo}
+                      key={x.id}
                       tabIndex={0}
-                      aria-label={`Abrir ${x.consecutivo}`}
+                      aria-label={`Abrir ${consecutivoDe(x)}`}
                       onClick={() => setAbierto(x)}
                       onKeyDown={e => {
                         if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
@@ -315,15 +365,17 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
                       className="cursor-pointer border-t border-[rgba(30,58,95,0.09)] hover:bg-[#f3ede1]/40 focus-visible:bg-[#f3ede1]/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#1e3a5f]"
                     >
                       <td className="whitespace-nowrap px-4 py-3">
-                        <p className="font-mono text-xs font-bold text-[#2c3e50]">{x.consecutivo}</p>
-                        <p className="text-[11px] text-[#6b7a8d]">{x.fecha}</p>
+                        <p className="font-mono text-xs font-bold text-[#2c3e50]">{consecutivoDe(x)}</p>
+                        <p className="text-[11px] text-[#6b7a8d]">{fechaCorta(x.fecha)}</p>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold ${PILDORA_TIPO[x.tipo]}`}>{x.tipo}</span>
+                        {x.tipo ? (
+                          <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold ${PILDORA_TIPO[TIPO_LEGIBLE[x.tipo]]}`}>{TIPO_LEGIBLE[x.tipo]}</span>
+                        ) : "—"}
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-sm font-semibold text-[#2c3e50]">{x.titulo}</p>
-                        <p className="text-xs text-[#6b7a8d]">{x.asunto} · {x.trd}</p>
+                        <p className="text-xs text-[#6b7a8d]">{x.asunto ?? "Sin asunto"}{x.trd ? ` · ${x.trd}` : ""}</p>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span className="inline-block rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
@@ -343,6 +395,20 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
                 </tbody>
               </table>
             </div>
+            {paginas > 1 && (
+              <div className="flex items-center justify-end gap-2 text-xs text-[#6b7a8d]">
+                <button onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina === 1} aria-label="Página anterior"
+                  className="rounded-md border border-[rgba(30,58,95,0.15)] bg-white p-1.5 hover:bg-[#f3ede1] disabled:opacity-40">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                Página {pagina} de {paginas}
+                <button onClick={() => setPagina(p => Math.min(paginas, p + 1))} disabled={pagina === paginas} aria-label="Página siguiente"
+                  className="rounded-md border border-[rgba(30,58,95,0.15)] bg-white p-1.5 hover:bg-[#f3ede1] disabled:opacity-40">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            </>
           )}
         </section>
       </div>

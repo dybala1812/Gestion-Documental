@@ -9,6 +9,9 @@ import { FileText, Inbox, Loader2, Play, RefreshCw, Upload } from "lucide-react"
 import { ClasificarDocumento, type DocumentoPendiente } from "./ClasificarDocumento";
 import { apiListDocumentos } from "../../lib/documentosApi";
 import { formatoFecha } from "../../lib/comunicacionesApi";
+import { Paginacion, usePaginacion } from "./Paginacion";
+
+const POR_PAGINA = 20;
 
 const select =
   "h-10 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 text-sm text-[#2c3e50] focus:border-[#e8740e] focus:outline-none focus:ring-2 focus:ring-[#e8740e]/30";
@@ -46,6 +49,11 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
     return () => { cancelado = true; };
   }, [recarga]);
 
+  const filtrados = documentos.filter(
+    d => (!dependencia || d.dependencia === dependencia) && (!origen || d.origen === origen),
+  );
+  const pag = usePaginacion(filtrados, POR_PAGINA, [dependencia, origen]);
+
   if (clasificando !== null) {
     return (
       <ClasificarDocumento
@@ -59,9 +67,6 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
 
   const dependencias = [...new Set(documentos.map(d => d.dependencia))];
   const origenes = [...new Set(documentos.map(d => d.origen))];
-  const visibles = documentos.filter(
-    d => (!dependencia || d.dependencia === dependencia) && (!origen || d.origen === origen),
-  );
   const th = "px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-[#2c3e50]";
 
   return (
@@ -111,7 +116,7 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
           <option value="">Todos los orígenes</option>
           {origenes.map(o => <option key={o}>{o}</option>)}
         </select>
-        <span className="text-xs text-[#6b7a8d]">{cargando ? "Cargando…" : `${visibles.length} documento(s)`}</span>
+        <span className="text-xs text-[#6b7a8d]">{cargando ? "Cargando…" : `${filtrados.length} documento(s)`}</span>
       </div>
 
       {/* ── Contenido ───────────────────────────────────────────────────── */}
@@ -130,7 +135,7 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
         <div className="flex items-center justify-center gap-2 rounded-xl border border-[rgba(30,58,95,0.09)] bg-white py-12 text-sm text-[#6b7a8d] shadow-sm">
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando documentos…
         </div>
-      ) : visibles.length === 0 ? (
+      ) : filtrados.length === 0 ? (
         <div className="rounded-xl border border-[rgba(30,58,95,0.09)] bg-white px-6 py-12 text-center text-sm text-[#6b7a8d] shadow-sm">
           No hay documentos por clasificar.
         </div>
@@ -145,7 +150,7 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {visibles.map(d => (
+              {pag.visibles.map(d => (
                 // Toda la fila abre el visor, igual que el botón Clasificar (SGD-088).
                 <tr
                   key={d.id}
@@ -190,6 +195,10 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
             </tbody>
           </table>
         </div>
+      )}
+      {!cargando && (
+        <Paginacion pagina={pag.pagina} paginas={pag.paginas} desde={pag.desde} mostrados={pag.visibles.length}
+          total={pag.total} onCambiar={pag.setPagina} etiqueta="documentos" />
       )}
     </div>
   );

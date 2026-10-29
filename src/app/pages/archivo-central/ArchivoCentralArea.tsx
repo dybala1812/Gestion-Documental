@@ -8,7 +8,7 @@
  *  · Celular/tablet: el menú se abre como panel lateral desde el botón "Menú".
  * Por ahora están listas las secciones de Comunicaciones; las demás indican "Próximamente".
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { sileo, Toaster as SileoToaster } from "sileo";
 import "sileo/styles.css";
@@ -26,6 +26,7 @@ import { Inicio } from "./Inicio";
 import { PorClasificar } from "./PorClasificar";
 import { Clasificados } from "./Clasificados";
 import { Archivo } from "./Archivo";
+import { BusquedaAvanzada } from "./BusquedaAvanzada";
 import { CatalogosArea } from "./CatalogosArea";
 import { PlantillasArea } from "./PlantillasArea";
 import { AuditoriaArea } from "./AuditoriaArea";
@@ -69,7 +70,7 @@ const menuGroups: MenuGroup[] = [
     title: "Consulta",
     items: [
       { key: "archivo", label: "Archivo", icon: Archive, disponible: true },
-      { key: "buscar", label: "Buscar", icon: Search },
+      { key: "buscar", label: "Buscar", icon: Search, disponible: true },
       { key: "historias", label: "Historias académicas", icon: GraduationCap },
     ],
   },
@@ -131,6 +132,9 @@ export function ArchivoCentralArea() {
   const [menuMovil, setMenuMovil] = useState(false);
   /** Tipo de entrega con el que se abre el asistente de Transferencias (viene de Centro de cargas B/C). */
   const [tipoTransferencia, setTipoTransferencia] = useState<TipoEntrega | undefined>();
+  /** Comunicación que se abre en la Bandeja al elegirla en la búsqueda avanzada. */
+  const [abrirComunicacionId, setAbrirComunicacionId] = useState<number | null>(null);
+  const limpiarComunicacionAbierta = useCallback(() => setAbrirComunicacionId(null), []);
 
   const areaNombre = usuario?.dependencyName ?? "Archivo Central";
   const usuarioNombre = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ") || "Usuario";
@@ -184,15 +188,15 @@ export function ArchivoCentralArea() {
 
   /** Lista de opciones del menú (se usa en el lateral de escritorio y en el panel de celular). */
   const listaMenu = (compacto: boolean) => (
-    <nav className="space-y-5" aria-label="Menú de Archivo Central">
+    <nav className="space-y-1.5 [@media(min-height:860px)]:space-y-2.5 [@media(min-height:980px)]:space-y-4" aria-label="Menú de Archivo Central">
       {menuGroups.map(group => (
         <div key={group.title}>
           {!compacto ? (
-            <p className="px-3 mb-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6b7a8d]">{group.title}</p>
+            <p className="px-3 mb-0.5 text-[10px] [@media(min-height:980px)]:text-[11px] [@media(min-height:980px)]:mb-1 font-bold uppercase tracking-[0.12em] text-[#6b7a8d]">{group.title}</p>
           ) : (
-            <div className="mx-3 mb-2 border-t border-[rgba(30,58,95,0.12)]" />
+            <div className="mx-3 mb-1.5 border-t border-[rgba(30,58,95,0.12)]" />
           )}
-          <ul className="space-y-1">
+          <ul className="space-y-0.5 [@media(min-height:980px)]:space-y-1">
             {group.items.map(item => {
               const Icon = item.icon;
               const activo = seccion === item.key;
@@ -203,20 +207,20 @@ export function ArchivoCentralArea() {
                     aria-current={activo ? "page" : undefined}
                     title={compacto ? item.label : undefined}
                     className={`relative w-full flex items-center gap-3 rounded-xl text-left transition-colors ${
-                      compacto ? "justify-center h-11" : "h-11 px-3"
+                      compacto ? "justify-center h-8 [@media(min-height:860px)]:h-9 [@media(min-height:980px)]:h-10" : "h-8 [@media(min-height:860px)]:h-9 [@media(min-height:980px)]:h-10 px-3"
                     } ${
                       activo
                         ? "bg-[#1e3a5f] text-white shadow-md shadow-[#1e3a5f]/25"
-                        : "text-[#1e3a5f] hover:bg-[#f3ede1]"
+                        : "text-[#1e3a5f] hover:bg-slate-200/60"
                     }`}
                   >
-                    {activo && <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[#e8740e]" />}
+                    {activo && <span className="absolute left-0 top-1 bottom-1 w-1 rounded-r-full bg-[#e8740e]" />}
                     <Icon className={`w-5 h-5 shrink-0 ${activo ? "text-white" : "text-[#1e3a5f]"}`} />
                     {!compacto && (
                       <>
                         <span className="flex-1 text-sm font-semibold truncate">{item.label}</span>
                         {!item.disponible && (
-                          <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${activo ? "bg-white/20 text-white" : "bg-[#ede6d8] text-[#6b7a8d]"}`}>
+                          <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${activo ? "bg-white/20 text-white" : "bg-slate-200/70 text-slate-500"}`}>
                             Pronto
                           </span>
                         )}
@@ -236,17 +240,17 @@ export function ArchivoCentralArea() {
   const seccionCom = aComunicaciones[seccion];
 
   return (
-    <div className="bg-[#f3ede1] flex items-stretch min-h-[calc(100vh-80px)]">
+    <div className="bg-gradient-to-br from-slate-50 to-blue-50 flex items-stretch min-h-[calc(100vh-80px)]">
       {/* En el body: AreaDashboard envuelve el módulo en un div con animate-fade-slide-up (termina en translateY(0)),
           que atrapa a todo lo "fixed" y haría que la alerta se desplace con la página. */}
       {createPortal(<SileoToaster position="top-center" />, document.body)}
       {/* ── Menú lateral (escritorio) ──────────────────────────────────── */}
       <aside
-        className={`hidden lg:flex flex-col shrink-0 bg-white border-r border-[rgba(30,58,95,0.12)] transition-[width] duration-300 ${colapsado ? "w-20" : "w-72"}`}
+        className={`hidden lg:flex flex-col shrink-0 bg-transparent border-r border-gray-200 transition-[width] duration-300 ${colapsado ? "w-20" : "w-72"}`}
       >
         {/* Sticky: el menú acompaña el scroll y se detiene donde empieza el footer */}
         <div className="sticky top-0 flex flex-col max-h-screen">
-          <div className={`flex items-center gap-3 border-b border-[rgba(30,58,95,0.12)] ${colapsado ? "justify-center px-2 py-4" : "px-5 py-4"}`}>
+          <div className={`flex items-center gap-3 border-b border-gray-200 ${colapsado ? "justify-center px-2 py-3" : "px-5 py-3"}`}>
             {!colapsado && (
               <div className="min-w-0 flex-1">
                 <p className="text-base font-bold text-[#1e3a5f] leading-tight">Archivo Central</p>
@@ -255,7 +259,7 @@ export function ArchivoCentralArea() {
             )}
             <button
               onClick={() => setColapsado(v => !v)}
-              className="w-9 h-9 rounded-lg flex items-center justify-center text-[#1e3a5f] hover:bg-[#f3ede1] border border-[rgba(30,58,95,0.12)]"
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-[#1e3a5f] hover:bg-slate-200/60 border border-gray-200"
               title={colapsado ? "Mostrar menú" : "Contraer menú"}
               aria-label={colapsado ? "Mostrar menú" : "Contraer menú"}
             >
@@ -263,16 +267,9 @@ export function ArchivoCentralArea() {
             </button>
           </div>
 
-          <div className={`flex-1 overflow-y-auto py-4 ${colapsado ? "px-2" : "px-3"}`}>
+          <div className={`flex-1 overflow-y-auto py-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${colapsado ? "px-2" : "px-3"}`}>
             {listaMenu(colapsado)}
           </div>
-
-          {!colapsado && (
-            <div className="px-5 py-3 border-t border-[rgba(30,58,95,0.12)] bg-[#f3ede1]/50">
-              <p className="text-xs font-semibold text-[#1e3a5f] truncate">{usuarioNombre}</p>
-              <p className="text-xs text-[#6b7a8d] truncate">{areaNombre}</p>
-            </div>
-          )}
         </div>
       </aside>
 
@@ -319,6 +316,8 @@ export function ArchivoCentralArea() {
             onSeccionChange={s => setSeccion(desdeComunicaciones[s])}
             recargarTrigger={recargarBandeja}
             onUltimaComunicacionId={actualizarUltimaComunicacionId}
+            abrirId={abrirComunicacionId}
+            onAbierta={limpiarComunicacionAbierta}
           />
         ) : seccion === "centro-cargas" ? (
           <CentroDeCargas onIrATransferencias={irATransferencias} />
@@ -333,6 +332,8 @@ export function ArchivoCentralArea() {
           <Clasificados onCargarLote={() => elegir("centro-cargas")} />
         ) : seccion === "archivo" ? (
           <Archivo onCargarLote={() => elegir("centro-cargas")} />
+        ) : seccion === "buscar" ? (
+          <BusquedaAvanzada onAbrirComunicacion={(id) => { setAbrirComunicacionId(id); elegir("bandeja"); }} />
         ) : (
           <Proximamente item={actual} />
         )}

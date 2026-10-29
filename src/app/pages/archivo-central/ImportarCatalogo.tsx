@@ -40,7 +40,6 @@ const COLUMNAS: Record<SlugImportable, ColumnaImportacion[]> = {
   dependencias: [
     { clave: "codigo", titulo: "Código", obligatoria: true, alias: ["codigo", "cod"] },
     { clave: "nombre", titulo: "Nombre", obligatoria: true, alias: ["nombre", "dependencia"] },
-    { clave: "dependencia_padre_codigo", titulo: "Código de la dependencia superior", alias: ["codigo superior", "dependencia superior", "superior", "codigo padre", "padre"] },
     { clave: "responsable", titulo: "Responsable", alias: ["responsable", "jefe"] },
     { clave: "correo_oficial", titulo: "Correo oficial", obligatoria: true, alias: ["correo oficial", "correo", "email", "e-mail"] },
   ],
@@ -62,7 +61,7 @@ const COLUMNAS: Record<SlugImportable, ColumnaImportacion[]> = {
 
 const ETIQUETA_CAMPO: Record<string, string> = Object.fromEntries(
   Object.values(COLUMNAS).flat().map((c) => [c.clave, c.titulo]).concat([
-    ["dependencia_padre_id", "Dependencia superior"], ["serie_padre_id", "Serie padre"],
+    ["serie_padre_id", "Serie padre"],
   ]),
 );
 

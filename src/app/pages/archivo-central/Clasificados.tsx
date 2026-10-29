@@ -10,6 +10,9 @@ import { FileText, FolderCheck, Loader2, RefreshCw, Search, Upload } from "lucid
 import { DetalleDocumento, type DocumentoDetalle } from "./DetalleDocumento";
 import { apiListClasificados, type Clasificado, type TipoClasificado } from "../../lib/clasificadosApi";
 import { apiListDependenciasCom, formatoFecha, type DependenciaCom } from "../../lib/comunicacionesApi";
+import { Paginacion, usePaginacion } from "./Paginacion";
+
+const POR_PAGINA = 20;
 
 const PILDORA_TIPO: Record<TipoClasificado, string> = {
   Entrada: "bg-blue-50 text-blue-700 border-blue-200",
@@ -83,6 +86,8 @@ export function Clasificados({ onCargarLote }: { onCargarLote?: () => void }) {
       .finally(() => { if (!cancelado) setCargando(false); });
     return () => { cancelado = true; };
   }, [busquedaAplicada, dependenciaId, recarga]);
+
+  const pag = usePaginacion(items, POR_PAGINA, [busquedaAplicada, dependenciaId]);
 
   if (abierto) {
     return (
@@ -188,7 +193,7 @@ export function Clasificados({ onCargarLote }: { onCargarLote?: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {items.map(c => (
+              {pag.visibles.map(c => (
                 // Toda la fila abre el documento, igual que el botón Abrir PDF (SGD-088).
                 <tr
                   key={c.id}
@@ -241,6 +246,10 @@ export function Clasificados({ onCargarLote }: { onCargarLote?: () => void }) {
             </tbody>
           </table>
         </div>
+      )}
+      {!error && items.length > 0 && (
+        <Paginacion pagina={pag.pagina} paginas={pag.paginas} desde={pag.desde} mostrados={pag.visibles.length}
+          total={pag.total} onCambiar={pag.setPagina} etiqueta="documentos" />
       )}
     </div>
   );

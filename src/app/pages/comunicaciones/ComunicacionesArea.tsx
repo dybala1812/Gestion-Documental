@@ -8,10 +8,12 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { sileo } from "sileo";
+import { formatApiError } from "../../lib/api";
 import { AlertTriangle, CalendarDays, Inbox, Loader2, Mail, MailQuestion, RefreshCw, Send } from "lucide-react";
 import {
   type Comunicacion, type CorreoSinAsociar, type DependenciaCom,
   apiListComunicaciones, apiListCorreosSinAsociar, apiListDependenciasCom, estaVencida,
+  apiObtenerComunicacion,
 } from "../../lib/comunicacionesApi";
 import { BandejaComunicaciones } from "./BandejaComunicaciones";
 import { CorreosSinAsociar as CorreosSinAsociarSeccion } from "./CorreosSinAsociar";
@@ -31,6 +33,10 @@ interface Props {
   recargarTrigger?: number;
   /** Devuelve el id de la comunicación más reciente tras cada carga. */
   onUltimaComunicacionId?: (id: number) => void;
+  /** Comunicación que se abre al entrar (p. ej. desde la búsqueda avanzada). */
+  abrirId?: number | null;
+  /** Avisa que ya se abrió `abrirId`, para que el padre lo limpie. */
+  onAbierta?: () => void;
 }
 
 export function ComunicacionesArea({
@@ -40,6 +46,8 @@ export function ComunicacionesArea({
   onSeccionChange,
   recargarTrigger,
   onUltimaComunicacionId,
+  abrirId,
+  onAbierta,
 }: Props) {
   const [seccionLocal, setSeccionLocal] = useState<Seccion>(seccionControlada ?? "bandeja");
   const seccion = seccionControlada ?? seccionLocal;
@@ -50,6 +58,15 @@ export function ComunicacionesArea({
   const [cargando, setCargando] = useState(true);
   const [abierta, setAbierta] = useState<Comunicacion | null>(null);
   const [version, setVersion] = useState(0);
+
+  // Abrir una comunicación pedida desde fuera (búsqueda avanzada).
+  useEffect(() => {
+    if (!abrirId) return;
+    apiObtenerComunicacion(abrirId)
+      .then(setAbierta)
+      .catch((e) => sileo.error({ title: "No se pudo abrir la comunicación", description: formatApiError(e) }))
+      .finally(() => onAbierta?.());
+  }, [abrirId, onAbierta]);
 
   const cargar = useCallback(async () => {
     setCargando(true);

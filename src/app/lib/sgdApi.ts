@@ -6,15 +6,7 @@
  * token contra NOVA y sincroniza el usuario en Supabase.
  */
 import { tokens, ApiError, tryRefreshToken } from "./api";
-import { DEV_BYPASS_AUTH } from "./config";
-
-/**
- * SOLO DESARROLLO: con el atajo sin login (DEV_BYPASS_AUTH) no hay token de NOVA,
- * así que se envía VITE_SGD_DEV_TOKEN, que el backend acepta solo en `next dev`
- * (variable SGD_DEV_TOKEN). En el build de producción DEV_BYPASS_AUTH es false.
- */
-const SGD_DEV_TOKEN: string | null =
-  DEV_BYPASS_AUTH && import.meta.env.VITE_SGD_DEV_TOKEN ? String(import.meta.env.VITE_SGD_DEV_TOKEN) : null;
+import { borrarSesionTemporal, leerSesionTemporal } from "./loginTemporal"; // ⚠️ TEMPORAL
 
 /**
  * URL base del backend SGD. Se lee de VITE_SGD_API_URL.
@@ -80,14 +72,23 @@ export async function sgdFetch<T>(
     ...(options.headers as Record<string, string>),
   };
 
-  const token = SGD_DEV_TOKEN ?? tokens.getAccess();
+  // ⚠️ TEMPORAL: con el login de pruebas (/login-temporal) se envía su token en lugar del de NOVA.
+  const temporal = leerSesionTemporal();
+  const token = temporal?.token ?? tokens.getAccess();
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
   const res = await fetch(url, { ...options, headers });
 
-  if (res.status === 401 && !SGD_DEV_TOKEN) {
+  if (res.status === 401 && temporal) {
+    // La sesión temporal venció o se reinició el backend: hay que volver a entrar.
+    borrarSesionTemporal();
+    const err = await res.json().catch(() => ({}));
+    throw errorSgd(401, err);
+  }
+
+  if (res.status === 401) {
     const sentToken = (headers["Authorization"] as string | undefined)?.slice(7) ?? null;
     const ok = await tryRefreshToken();
     if (ok) {
@@ -120,7 +121,7 @@ export async function sgdFetch<T>(
  * token que sgdFetch. Devuelve el Blob y el nombre del archivo (Content-Disposition).
  */
 export async function sgdFetchBlob(path: string): Promise<{ blob: Blob; nombre: string | null }> {
-  const token = SGD_DEV_TOKEN ?? tokens.getAccess();
+  const token = leerSesionTemporal()?.token ?? tokens.getAccess();
   const res = await fetch(`${SGD_API_BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });

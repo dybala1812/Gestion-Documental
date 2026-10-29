@@ -29,17 +29,11 @@ export const GOOGLE_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
 
 /**
- * SOLO DESARROLLO: entra a los módulos sin pasar por el login, con un usuario
- * simulado. Requiere `npm run dev` (import.meta.env.DEV) y en `.env.local`:
- *   VITE_DEV_BYPASS_AUTH=true
- *   VITE_DEV_BYPASS_ROL=admin   # admin | area | usuario
- * En el build de producción import.meta.env.DEV es false: no tiene efecto.
- * Las llamadas al backend real fallarán (no hay token válido).
+ * ⚠️ TEMPORAL — BORRAR ANTES DEL DESPLIEGUE (ver ia_contexto/login-temporal.md).
+ * Login de pruebas por perfil del módulo Archivo Central en /login-temporal. Requiere `npm run dev`
+ * (import.meta.env.DEV) y en `.env.local`: VITE_LOGIN_TEMPORAL=true. La clave vive solo en el
+ * backend (SGD_LOGIN_TEMPORAL_CLAVE); aquí no hay ningún secreto. En el build de producción
+ * import.meta.env.DEV es false: la ruta ni siquiera se incluye.
  */
-export const DEV_BYPASS_AUTH =
-  import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH === "true";
-
-export const DEV_BYPASS_ROL: "admin" | "area" | "usuario" =
-  (["admin", "area", "usuario"] as const).find(
-    (r) => r === import.meta.env.VITE_DEV_BYPASS_ROL,
-  ) ?? "admin";
+export const LOGIN_TEMPORAL =
+  import.meta.env.DEV && import.meta.env.VITE_LOGIN_TEMPORAL === "true";
