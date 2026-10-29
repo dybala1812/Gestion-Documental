@@ -3,9 +3,11 @@ import {
   LogOut, LayoutDashboard, Search, Home,
   Settings, ChevronRight, User, Shield,
   UserPlus, FileText, BarChart2, Bell, BookOpen as GraduationCap, Bot, Image, MessageSquare, Megaphone, Mail, PlayCircle, Send, Vote,
+  KeyRound,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { LOGIN_TEMPORAL } from '../../lib/config'; // ⚠️ TEMPORAL: login de pruebas del SGD
 import { motion, AnimatePresence } from 'motion/react';
 import logoImage from '../../../assets/logo-uniautonoma.webp';
 
@@ -308,7 +310,10 @@ export function InstitutionalNavbar() {
                   <NavLink to="/convocatorias" icon={<Megaphone className="w-5 h-5" />} active={isActive('/convocatorias')}>Convocatorias</NavLink>
                   <NavLink to="/quiz" icon={<GraduationCap className="w-5 h-5" />} active={isActive('/quiz')}>Quiz</NavLink>
                   <NavLink to="/consulta" icon={<Search className="w-5 h-5" />} active={isActive('/consulta')}>Consultar</NavLink>
-                  <NavLink to="/registro" icon={<UserPlus className="w-5 h-5" />} active={isActive('/registro')}>Registrarse</NavLink>
+                  {/* ⚠️ TEMPORAL: con el login de pruebas activo solo queda "Ingresar" (y "Login 2"). */}
+                  {!LOGIN_TEMPORAL && (
+                    <NavLink to="/registro" icon={<UserPlus className="w-5 h-5" />} active={isActive('/registro')}>Registrarse</NavLink>
+                  )}
                 </>
               )}
 
@@ -412,15 +417,27 @@ export function InstitutionalNavbar() {
                   </motion.button>
                 </div>
               ) : (
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => navigate('/login')}
-                  className="ml-4 flex items-center gap-2 px-5 py-2.5 bg-[#ff9800] hover:bg-[#f57c00] text-white rounded-md text-sm font-bold tracking-wide transition-colors shadow-md"
-                >
-                  Ingresar
-                  <ChevronRight className="w-4 h-4" />
-                </motion.button>
+                <>
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => navigate('/login')}
+                    className="ml-4 flex items-center gap-2 px-5 py-2.5 bg-[#ff9800] hover:bg-[#f57c00] text-white rounded-md text-sm font-bold tracking-wide transition-colors shadow-md"
+                  >
+                    Ingresar
+                    <ChevronRight className="w-4 h-4" />
+                  </motion.button>
+                  {/* ⚠️ TEMPORAL: acceso al login de pruebas por perfil del SGD (solo npm run dev). */}
+                  {LOGIN_TEMPORAL && (
+                    <button
+                      onClick={() => navigate('/login-temporal')}
+                      title="Login temporal de pruebas del Archivo Central (solo desarrollo)"
+                      className="ml-2 flex items-center gap-1 rounded-md border border-white/30 px-2 py-1 text-[11px] font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+                    >
+                      <KeyRound className="w-3 h-3" /> Login 2
+                    </button>
+                  )}
+                </>
               )}
             </div>
 
@@ -533,7 +550,9 @@ export function InstitutionalNavbar() {
                     <MobileItem index={2} to="/convocatorias" label="Convocatorias" icon={<Megaphone className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
                     <MobileItem index={3} to="/quiz" label="ElectroQuiz" icon={<GraduationCap className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
                     <MobileItem index={4} to="/consulta" label="Consultar Radicado" icon={<Search className="w-4 h-4" />} onClick={() => setMenuOpen(false)} />
-                    <MobileItem index={5} to="/registro" label="Crear cuenta" icon={<UserPlus className="w-4 h-4" />} onClick={() => setMenuOpen(false)} highlight badge="Gratis" />
+                    {!LOGIN_TEMPORAL && (
+                      <MobileItem index={5} to="/registro" label="Crear cuenta" icon={<UserPlus className="w-4 h-4" />} onClick={() => setMenuOpen(false)} highlight badge="Gratis" />
+                    )}
                   </>
                 )}
 
@@ -629,13 +648,25 @@ export function InstitutionalNavbar() {
                 </motion.p>
 
                 {!user ? (
-                  <MobileItem
-                    index={5}
-                    to="/login"
-                    label="Ingresar al sistema"
-                    icon={<User className="w-4 h-4" />}
-                    onClick={() => setMenuOpen(false)}
-                  />
+                  <>
+                    <MobileItem
+                      index={5}
+                      to="/login"
+                      label="Ingresar al sistema"
+                      icon={<User className="w-4 h-4" />}
+                      onClick={() => setMenuOpen(false)}
+                    />
+                    {/* ⚠️ TEMPORAL: login de pruebas por perfil del SGD (solo npm run dev). */}
+                    {LOGIN_TEMPORAL && (
+                      <MobileItem
+                        index={6}
+                        to="/login-temporal"
+                        label="Login 2 (pruebas)"
+                        icon={<KeyRound className="w-4 h-4" />}
+                        onClick={() => setMenuOpen(false)}
+                      />
+                    )}
+                  </>
                 ) : (
                   <motion.div
                     initial={{ opacity: 0, x: 60 }}

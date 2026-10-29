@@ -4,17 +4,20 @@
  * así la URL, el token y el manejo de errores se cambian en un solo lugar.
  * Usa las mismas variables que el resto del frontend (.env):
  *   VITE_SGD_API_URL        → http://localhost:3000/api   (ya incluye /api)
- *   VITE_SGD_DEV_TOKEN      → token de desarrollo (solo con VITE_DEV_BYPASS_AUTH=true)
  */
 
 import { mensajeErrorSgd } from "../lib/sgdApi";
+import { tokens } from "../lib/api";
+import { leerSesionTemporal } from "../lib/loginTemporal"; // ⚠️ TEMPORAL
 
 const BASE =((import.meta.env.VITE_SGD_API_URL as string | undefined) ?? "http://localhost:3000/api").replace(/\/$/, "");
 
-/** Token para el backend SGD. En desarrollo, el de pruebas; en producción debe salir del login de NOVA. */
+/**
+ * Token para el backend SGD: el de la sesión del login temporal de pruebas (⚠️ TEMPORAL) o, si no
+ * hay, el de NOVA, igual que sgdApi. Ya no se usa un token fijo de .env: quedaba dentro del JavaScript.
+ */
 function token(): string | undefined {
-  if (import.meta.env.VITE_DEV_BYPASS_AUTH === "true") return import.meta.env.VITE_SGD_DEV_TOKEN as string | undefined;
-  return undefined; // TODO: devolver aquí el token de sesión real (igual que el servicio de Comunicaciones)
+  return leerSesionTemporal()?.token ?? tokens.getAccess() ?? undefined;
 }
 
 async function http<T>(ruta: string, init: RequestInit = {}): Promise<T> {

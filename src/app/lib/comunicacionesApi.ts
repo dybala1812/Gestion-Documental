@@ -109,9 +109,66 @@ export interface CorreoSinAsociar {
 
 export interface ResumenMesHistorico {
   mes: number; // 1-12
+  total: number;
   cerradas_sistema: number;
   importadas: number;
+  futuro: boolean;
 }
+
+export interface CalendarioHistorico {
+  anio: number;
+  meses: ResumenMesHistorico[];
+  /** Años que tienen comunicaciones registradas. */
+  anios: number[];
+}
+
+export interface ComunicacionHistorico {
+  id: number;
+  consecutivo: string;
+  consecutivo_original: string | null;
+  tipo: TipoComunicacion;
+  origen: "correo" | "manual" | "historico";
+  estado: EstadoComunicacion;
+  asunto: string;
+  remitente_nombre: string | null;
+  destinatario_nombre: string | null;
+  dependencia: string | null;
+  fecha_recepcion: string;
+}
+
+/** Fila del Excel histórico ya mapeada a las columnas del sistema. */
+export interface FilaHistorico {
+  tipo?: string;
+  numero_original?: string;
+  fecha?: string; // AAAA-MM-DD
+  asunto?: string;
+  remitente?: string;
+  destinatario?: string;
+  dependencia?: string;
+  observaciones?: string;
+}
+
+export interface ResultadoFilaHistorico {
+  fila: number;
+  resultado: "nueva" | "ya_importada" | "revisar" | "error";
+  consecutivo?: string;
+  campo?: string;
+  error?: string;
+  aviso?: string;
+}
+
+export interface ResultadoImportacionHistorico {
+  confirmado: boolean;
+  total: number;
+  nuevas: number;
+  ya_importadas: number;
+  revisar: number;
+  errores: number;
+  filas: ResultadoFilaHistorico[];
+}
+
+/** Filtro del histórico: todas, recibidas (ENT), enviadas (SAL) o internas (INT). */
+export type FiltroHistorico = "" | "recibidas" | "enviadas" | "internas";
 
 // ── Etiquetas y colores (paleta de NOVA, Tailwind) ──────────────────────────
 
@@ -268,48 +325,17 @@ export async function apiObtenerComunicacion(id: number): Promise<Comunicacion> 
 }
 
 /** F2 · Remitir a una dependencia con plazo en días hábiles.
- *  El frontend dispara el webhook de n8n; n8n envía el correo y luego actualiza el estado vía /api/n8n/remisiones/remitir.
+ *  El backend revisa el permiso y dispara n8n F2 con el usuario autenticado; n8n envía el correo
+ *  y actualiza el estado. (El navegador ya no llama a n8n: su token quedaba expuesto.)
  */
 export async function apiRemitirComunicacion(
   id: number,
   payload: { dependencia_id: number; plazo_dias_habiles: number; mensaje: string; adjuntos: string[] },
 ): Promise<Comunicacion> {
-  const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_REMITIR_URL;
-  if (!webhookUrl) {
-    throw new Error("VITE_N8N_WEBHOOK_REMITIR_URL no está configurado");
-  }
-
-  const webhookToken = import.meta.env.VITE_N8N_WEBHOOK_TOKEN;
-  const webhookAuthHeader = import.meta.env.VITE_N8N_WEBHOOK_AUTH_HEADER ?? "Authorization";
-  const webhookAuthPrefix = import.meta.env.VITE_N8N_WEBHOOK_AUTH_PREFIX ?? "Bearer ";
-  const authValue = webhookToken ? `${webhookAuthPrefix}${webhookToken}` : undefined;
-
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (authValue) headers[webhookAuthHeader] = authValue;
-
-  const usuarioId = Number(import.meta.env.VITE_N8N_WEBHOOK_USUARIO_ID) || 1;
-
-  const res = await fetch(webhookUrl, {
+  return sgdFetch<Comunicacion>(`/comunicaciones/${id}/enviar-remision`, {
     method: "POST",
-    headers,
-    body: JSON.stringify({
-      modo: "remitir",
-      comunicacion_id: id,
-      usuario_id: usuarioId,
-      dependencia_id: payload.dependencia_id,
-      plazo_dias_habiles: payload.plazo_dias_habiles,
-      mensaje: payload.mensaje,
-      adjuntos_ids: payload.adjuntos,
-    }),
+    body: JSON.stringify(payload),
   });
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => "Error en n8n");
-    throw new Error(`n8n respondió ${res.status}: ${err}`);
-  }
-
-  // n8n actualizó el estado; refrescamos la comunicación desde el backend.
-  return apiObtenerComunicacion(id);
 }
 
 /** F2 · Devolver a la dependencia (respuesta incompleta). */
@@ -320,48 +346,17 @@ export async function apiDevolverComunicacion(id: number, motivo: string): Promi
   });
 }
 
-/** F3 · Enviar respuesta al remitente: dispara el webhook de n8n, que envía el correo y luego cierra la entrada.
- *  Devuelve la comunicación de entrada actualizada desde el backend.
+/** F3 · Enviar respuesta al remitente: el backend revisa el permiso y dispara n8n F3 con el usuario
+ *  autenticado; n8n envía el correo y luego cierra la entrada. Devuelve la entrada actualizada.
  */
 export async function apiResponderRemitente(
   id: number,
   payload: { asunto: string; cuerpo: string; adjuntos: string[] },
 ): Promise<Comunicacion> {
-  const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_RESPONDER_URL;
-  if (!webhookUrl) {
-    throw new Error("VITE_N8N_WEBHOOK_RESPONDER_URL no está configurado");
-  }
-
-  const webhookToken = import.meta.env.VITE_N8N_WEBHOOK_TOKEN;
-  const webhookAuthHeader = import.meta.env.VITE_N8N_WEBHOOK_AUTH_HEADER ?? "Authorization";
-  const webhookAuthPrefix = import.meta.env.VITE_N8N_WEBHOOK_AUTH_PREFIX ?? "Bearer ";
-  const authValue = webhookToken ? `${webhookAuthPrefix}${webhookToken}` : undefined;
-
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (authValue) headers[webhookAuthHeader] = authValue;
-
-  const usuarioId = Number(import.meta.env.VITE_N8N_WEBHOOK_USUARIO_ID) || 1;
-
-  const res = await fetch(webhookUrl, {
+  return sgdFetch<Comunicacion>(`/comunicaciones/${id}/enviar-respuesta`, {
     method: "POST",
-    headers,
-    body: JSON.stringify({
-      modo: "responder",
-      comunicacion_id: id,
-      usuario_id: usuarioId,
-      asunto: payload.asunto,
-      cuerpo: payload.cuerpo,
-      adjuntos_ids: payload.adjuntos,
-    }),
+    body: JSON.stringify(payload),
   });
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => "Error en n8n");
-    throw new Error(`n8n respondió ${res.status}: ${err}`);
-  }
-
-  // n8n enviará el correo y luego cerrará la entrada vía /api/comunicaciones/[id]/responder.
-  return apiObtenerComunicacion(id);
 }
 
 /** Anular con motivo (RF-AC-024). */
@@ -423,17 +418,30 @@ export async function apiCrearDesdeCorreo(correoId: number): Promise<Comunicacio
   return sgdFetch<Comunicacion>(`/correos-sin-asociar/${correoId}/crear`, { method: "POST" });
 }
 
-// ── Histórico: aún no hay endpoints en el backend ───────────────────────────
-// Cuando se implementen, reemplazar estas funciones por llamadas a /api/historico/*.
+// ── Registro histórico (RF-AC-019) ──────────────────────────────────────────
 
-export async function apiResumenHistorico(_year: number): Promise<ResumenMesHistorico[]> {
-  // TODO: implementar backend de registro histórico (RF-AC-020).
-  return [];
+export async function apiCalendarioHistorico(anio: number, tipo: FiltroHistorico = ""): Promise<CalendarioHistorico> {
+  const qs = new URLSearchParams({ anio: String(anio) });
+  if (tipo) qs.set("tipo", tipo);
+  return sgdFetch<CalendarioHistorico>(`/comunicaciones/historico?${qs}`);
 }
 
-export async function apiComunicacionesDelMes(_year: number, _mes: number): Promise<Comunicacion[]> {
-  // TODO: implementar backend de registro histórico (RF-AC-020).
-  return [];
+export async function apiComunicacionesDelMes(
+  anio: number, mes: number, tipo: FiltroHistorico = "", pagina = 1,
+): Promise<{ total: number; filas: ComunicacionHistorico[] }> {
+  const qs = new URLSearchParams({ anio: String(anio), mes: String(mes), pagina: String(pagina), limite: "50" });
+  if (tipo) qs.set("tipo", tipo);
+  return sgdFetch(`/comunicaciones/historico/mes?${qs}`);
+}
+
+/** Vista previa (confirmar = false) o importación del Excel histórico. Reimportar no duplica. */
+export async function apiImportarHistorico(
+  filas: FilaHistorico[], confirmar: boolean, tipo?: string,
+): Promise<ResultadoImportacionHistorico> {
+  return sgdFetch<ResultadoImportacionHistorico>("/comunicaciones/historico/importar", {
+    method: "POST",
+    body: JSON.stringify({ filas, confirmar, ...(tipo ? { tipo } : {}) }),
+  });
 }
 
 /** ⚠️ SOLO PRUEBAS: elimina físicamente una comunicación y sus archivos. */
