@@ -60,7 +60,6 @@ interface Dependencia {
   responsable?: string | null;
   correo_oficial: string;
   estado: string;
-  padre?: Relacion | null;
 }
 
 interface TRD {
@@ -214,7 +213,6 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
         columnas: [
           { key: "codigo", label: "Código", ancho: "w-24" },
           { key: "nombre", label: "Nombre" },
-          { key: "superior", label: "Dependencia superior", render: (r) => (r as Dependencia).padre?.nombre ?? "—" },
           { key: "responsable", label: "Responsable", render: (r) => (r as Dependencia).responsable ?? "—" },
           { key: "correo", label: "Correo", render: (r) => (r as Dependencia).correo_oficial },
           { key: "estado", label: "Estado", render: (r) => <EstadoBadge estado={(r as Dependencia).estado} /> },
@@ -222,7 +220,6 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
         campos: [
           { key: "codigo", label: "Código", tipo: "texto", requerido: true, placeholder: "Ej. 100" },
           { key: "nombre", label: "Nombre", tipo: "texto", requerido: true, placeholder: "Ej. Rectoría" },
-          { key: "dependencia_padre_id", label: "Dependencia superior", tipo: "entero", relacion: "dependencias" },
           { key: "responsable", label: "Responsable", tipo: "texto", placeholder: "Nombre del responsable" },
           { key: "correo_oficial", label: "Correo oficial", tipo: "email", requerido: true, placeholder: "correo@uniautonoma.edu.co" },
         ],

@@ -12,6 +12,19 @@ import { Input } from "../../components/ui/input";
 import { formatApiError } from "../../lib/api";
 import { guardarParametro, listarParametros, type Parametro } from "../../lib/catalogosApi";
 
+/** Título corto de cada parámetro; la explicación viene de la base (descripcion). */
+const TITULOS: Record<string, string> = {
+  anios_minimos_transferencia: "Años antes de transferir",
+  tamano_maximo_archivo_mb: "Tamaño máximo de archivo (MB)",
+  formatos_permitidos: "Formatos de archivo permitidos",
+  plazo_respuesta_dias_habiles: "Plazo de respuesta (días hábiles)",
+  recordatorio_cada_dias_habiles: "Días entre recordatorios",
+  max_recordatorios_antes_escalar: "Recordatorios antes de escalar",
+  umbral_confianza_ia: "Confianza mínima de la IA",
+  ia_habilitada: "Sugerencias con IA",
+  buzon_archivo_central: "Buzón del Archivo Central",
+};
+
 function rango(p: Parametro): string | null {
   if (p.tipo !== "entero" && p.tipo !== "decimal") return null;
   if (p.minimo != null && p.maximo != null) return `Entre ${p.minimo} y ${p.maximo}`;
@@ -49,7 +62,7 @@ export function ParametrosPanel() {
     try {
       const actualizado = await guardarParametro(p.clave, valor);
       setParametros((lista) => lista.map((x) => (x.clave === p.clave ? actualizado : x)));
-      sileo.success({ title: "Parámetro guardado", description: p.descripcion });
+      sileo.success({ title: "Parámetro guardado", description: TITULOS[p.clave] ?? p.descripcion });
     } catch (e) {
       const msg = formatApiError(e);
       setErrores((er) => ({ ...er, [p.clave]: msg }));
@@ -76,8 +89,8 @@ export function ParametrosPanel() {
           return (
             <li key={p.clave} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_280px] md:items-start">
               <div className="min-w-0">
-                <label htmlFor={id} className="block text-sm font-semibold text-[#1e3a5f]">{p.descripcion}</label>
-                <p className="mt-0.5 font-mono text-xs text-[#6b7a8d]">{p.clave}</p>
+                <label htmlFor={id} className="block text-sm font-semibold text-[#1e3a5f]">{TITULOS[p.clave] ?? p.descripcion}</label>
+                {TITULOS[p.clave] && p.descripcion && <p className="mt-0.5 text-xs text-[#6b7a8d]">{p.descripcion}</p>}
               </div>
               <div className="space-y-1">
                 <div className="flex gap-2">
