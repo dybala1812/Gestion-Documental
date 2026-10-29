@@ -246,6 +246,7 @@ interface ListComunicacionesFiltros {
   dependencia_id?: number;
   tipo?: string;
   q?: string;
+  limite?: number;
 }
 
 export async function apiListComunicaciones(filtros: ListComunicacionesFiltros = {}): Promise<Comunicacion[]> {
@@ -256,6 +257,7 @@ export async function apiListComunicaciones(filtros: ListComunicacionesFiltros =
   if (filtros.dependencia_id) q.set("dependencia_id", String(filtros.dependencia_id));
   if (filtros.tipo) q.set("tipo", filtros.tipo);
   if (filtros.q) q.set("q", filtros.q);
+  if (filtros.limite) q.set("limite", String(filtros.limite));
   const qs = q.toString() ? `?${q}` : "";
   return sgdFetch<Comunicacion[]>(`/comunicaciones${qs}`);
 }

@@ -4,7 +4,8 @@
  * barra de avance y tabla por archivo. Se procesa por partes y se puede pausar y retomar.
  * Por ahora el procesamiento es SIMULADO en el navegador (ver TODO); luego lo reemplaza el seguimiento al backend.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { alertaCarga, plural } from "../../lib/alertasCarga";
 import { ArrowLeft, Check, Download, Pause, Play, RotateCw } from "lucide-react";
 
 export type EstadoArchivo = "Pendiente" | "Aceptado" | "Duplicado" | "Error";
@@ -83,8 +84,33 @@ export function LoteDetalle({ lote, onVolver }: { lote: LoteData; onVolver: () =
     return () => clearTimeout(t);
   }, [pausado, pendientes, items]);
 
-  const reintentar = () =>
+  // Aviso de cierre del lote: una sola vez cuando no queda nada pendiente (y de nuevo si se reintenta).
+  const avisado = useRef(false);
+  useEffect(() => {
+    if (!terminado) { avisado.current = false; return; }
+    if (avisado.current) return;
+    avisado.current = true;
+    const unidad = lote.unidad === "filas" ? ["fila", "filas"] as const : ["archivo", "archivos"] as const;
+    const aceptados = cuenta("Aceptado");
+    const resumen = `${aceptados} aceptados · ${cuenta("Duplicado")} duplicados · ${errores} con error`;
+    if (total === 0) alertaCarga.info(`Lote ${lote.codigo} sin ${unidad[1]}`, "No había nada que procesar.");
+    else if (errores > 0) alertaCarga.aviso(`Lote ${lote.codigo} terminado con errores`, `${plural(total, unidad[0], unidad[1])}: ${resumen}.`);
+    else if (aceptados === 0) alertaCarga.aviso(`Lote ${lote.codigo} sin ${unidad[1]} nuevos`, `${resumen}.`);
+    else alertaCarga.ok(`Lote ${lote.codigo} completado`, `${plural(total, unidad[0], unidad[1])}: ${resumen}.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [terminado]);
+
+  const reintentar = () => {
+    const n = items.filter(i => i.estado === "Error" && i.reintentable).length;
     setItems(prev => prev.map(i => (i.estado === "Error" && i.reintentable ? { ...i, estado: "Pendiente", detalle: "Reintentando…" } : i)));
+    if (n > 0) alertaCarga.info("Reintentando", `${plural(n, "elemento fallido vuelve", "elementos fallidos vuelven")} a la cola.`);
+  };
+
+  const alternarPausa = () => {
+    if (pausado) alertaCarga.info("Proceso reanudado", `Quedan ${plural(pendientes, "pendiente", "pendientes")}.`);
+    else alertaCarga.aviso("Proceso en pausa", "Pulsa Reanudar para continuar con el lote.");
+    setPausado(p => !p);
+  };
 
   const pasosHechos = useMemo(() => (terminado ? PASOS.length : Math.min(PASOS.length - 1, 1 + Math.floor((pct / 100) * 4))), [terminado, pct]);
 
@@ -100,6 +126,7 @@ export function LoteDetalle({ lote, onVolver }: { lote: LoteData; onVolver: () =
     a.download = `informe-${lote.codigo}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
+    alertaCarga.ok("Informe descargado", `informe-${lote.codigo}.csv`);
   };
 
   const th = "px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-white whitespace-nowrap";
@@ -169,7 +196,7 @@ export function LoteDetalle({ lote, onVolver }: { lote: LoteData; onVolver: () =
 
       <div className="flex flex-wrap gap-2">
         {!terminado && (
-          <button className={btn} onClick={() => setPausado(p => !p)}>
+          <button className={btn} onClick={alternarPausa}>
             {pausado ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />} {pausado ? "Reanudar" : "Pausar"}
           </button>
         )}

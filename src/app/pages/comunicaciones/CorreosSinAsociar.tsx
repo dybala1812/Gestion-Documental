@@ -6,7 +6,7 @@
  * Se asocian como respuesta de una comunicación remitida/devuelta o se crean como nuevas.
  */
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { sileo } from "sileo";
 import { Check, ChevronsUpDown, Info, Link2, Loader2, MailQuestion, PlusCircle } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import {
@@ -57,14 +57,17 @@ export function CorreosSinAsociar({ correos, comunicaciones, onResuelto }: Props
   const seleccionada = candidatas.find(c => String(c.id) === destino) ?? null;
 
   const asociar = async () => {
-    if (!sel || !destino) { toast.error("Elige la comunicación a la que vas a ligar la respuesta"); return; }
+    if (!sel || !destino) { sileo.error({ title: "Elige la comunicación a la que vas a ligar la respuesta" }); return; }
     setProcesando(true);
     try {
       const com = await apiAsociarCorreo(sel.id, Number(destino));
-      toast.success(`Ligado a ${com.consecutivo}`, { description: "Quedó como respuesta de la dependencia" });
+      sileo.success({
+        title: `Ligado a ${com.consecutivo}`,
+        description: com.asunto || "Quedó como respuesta de la dependencia",
+      });
       onResuelto(sel.id, com, false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo asociar");
+      sileo.error({ title: e instanceof Error ? e.message : "No se pudo asociar" });
     } finally {
       setProcesando(false);
     }
@@ -75,10 +78,13 @@ export function CorreosSinAsociar({ correos, comunicaciones, onResuelto }: Props
     setProcesando(true);
     try {
       const com = await apiCrearDesdeCorreo(sel.id);
-      toast.success(`Creada como ${com.consecutivo}`);
+      sileo.success({
+        title: `Creada como ${com.consecutivo}`,
+        description: com.asunto || "Se creó una nueva comunicación en la bandeja",
+      });
       onResuelto(sel.id, com, true);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo crear");
+      sileo.error({ title: e instanceof Error ? e.message : "No se pudo crear" });
     } finally {
       setProcesando(false);
     }

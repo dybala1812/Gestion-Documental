@@ -7,7 +7,9 @@
  *   VITE_SGD_DEV_TOKEN      → token de desarrollo (solo con VITE_DEV_BYPASS_AUTH=true)
  */
 
-const BASE = ((import.meta.env.VITE_SGD_API_URL as string | undefined) ?? "http://localhost:3000/api").replace(/\/$/, "");
+import { mensajeErrorSgd } from "../lib/sgdApi";
+
+const BASE =((import.meta.env.VITE_SGD_API_URL as string | undefined) ?? "http://localhost:3000/api").replace(/\/$/, "");
 
 /** Token para el backend SGD. En desarrollo, el de pruebas; en producción debe salir del login de NOVA. */
 function token(): string | undefined {
@@ -27,7 +29,8 @@ async function http<T>(ruta: string, init: RequestInit = {}): Promise<T> {
   });
   if (!r.ok) {
     const cuerpo = await r.json().catch(() => null);
-    throw new Error(cuerpo?.mensaje ?? `Error ${r.status} al llamar a ${ruta}`);
+    // Contrato de errores del backend (RN-AC-15): { error, campo? } o { error: número, motivo }.
+    throw new Error(mensajeErrorSgd(cuerpo) ?? cuerpo?.mensaje ?? `Error ${r.status} al llamar a ${ruta}`);
   }
   return r.json() as Promise<T>;
 }

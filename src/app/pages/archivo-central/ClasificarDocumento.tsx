@@ -6,6 +6,7 @@
  */
 import { useState } from "react";
 import { toast } from "sonner";
+import { VisorDocumento, guardarArchivoDescargado, useArchivoDocumento } from "./VisorDocumento";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, Loader2, ScanText } from "lucide-react";
 
 export interface DocumentoPendiente {
@@ -16,6 +17,8 @@ export interface DocumentoPendiente {
   origen: string;
   fechaCarga: string;
   paginas: number;
+  /** Id del archivo en el almacenamiento (GET /api/archivos/{id}) para el visor. */
+  archivoId?: string;
 }
 
 /* ───────────────────── Catálogos de ejemplo (luego, de la API) ───────────────────── */
@@ -55,38 +58,15 @@ function Campo({ label, requerido, className = "", children }: {
   );
 }
 
-/* ───────────────────── Visor (marcador de posición) ───────────────────── */
+/* ───────────────────── Visor del documento real ───────────────────── */
 function Visor({ doc }: { doc: DocumentoPendiente }) {
-  const [pagina, setPagina] = useState(1);
-  return (
-    <section className={`${panel} flex h-full flex-col overflow-hidden`}>
-      <div className="flex items-center gap-3 bg-[#1e3a5f] px-4 py-3 text-white">
-        <FileText className="h-4 w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{doc.nombre}</span>
-        <button
-          aria-label="Página anterior" disabled={pagina <= 1} onClick={() => setPagina(p => p - 1)}
-          className="rounded p-1 hover:bg-white/10 disabled:opacity-40"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <span className="text-xs tabular-nums">{pagina} / {doc.paginas}</span>
-        <button
-          aria-label="Página siguiente" disabled={pagina >= doc.paginas} onClick={() => setPagina(p => p + 1)}
-          className="rounded p-1 hover:bg-white/10 disabled:opacity-40"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="flex flex-1 flex-col bg-[#ede6d8] p-6">
-        {/* TODO: reemplazar por el visor del PDF/imagen real (por ejemplo un <iframe> con la URL del archivo). */}
-        <div className="flex min-h-[460px] flex-1 flex-col items-center justify-center gap-2 rounded bg-white p-6 text-center shadow-sm">
-          <FileText className="h-10 w-10 text-[#6b7a8d]" />
-          <p className="text-sm font-semibold text-[#2c3e50]">Vista previa de la página {pagina}</p>
-          <p className="text-xs text-[#6b7a8d]">Aquí se mostrará el documento cuando esté conectado al almacenamiento.</p>
-        </div>
-      </div>
-    </section>
-  );
+  const archivo = useArchivoDocumento(doc.archivoId);
+  const descargar = () => {
+    if (!guardarArchivoDescargado(archivo, doc.nombre)) {
+      toast.info(archivo.cargando ? "El documento todavía se está cargando" : "Este documento no tiene un archivo disponible");
+    }
+  };
+  return <VisorDocumento titulo={doc.nombre} paginas={doc.paginas} archivo={archivo} onDescargar={descargar} />;
 }
 
 /* ───────────────────── Componente ───────────────────── */

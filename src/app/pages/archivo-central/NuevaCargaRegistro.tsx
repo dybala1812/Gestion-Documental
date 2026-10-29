@@ -7,7 +7,7 @@
  */
 import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
-import { toast } from "sonner";
+import { alertaCarga, motivoError, plural } from "../../lib/alertasCarga";
 import { ArrowLeft, ArrowRight, Check, FileText, History, Info, Loader2, UploadCloud, Wand2, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { tamanoLegible, type ArchivoLote, type LoteData } from "./LoteDetalle";
@@ -184,20 +184,22 @@ export function NuevaCargaRegistro({ onVolver, onIniciar }: Props) {
   const elegir = (lista: FileList | File[] | null) => {
     const f = lista && Array.from(lista)[0];
     if (!f) return;
-    if (!/\.(xlsx|xls|csv)$/i.test(f.name)) return toast.error("Sube un archivo .xlsx o .csv");
+    if (!/\.(xlsx|xls|csv)$/i.test(f.name)) return alertaCarga.error("Formato no permitido", "Sube un archivo .xlsx, .xls o .csv.");
     setArchivo(f);
   };
 
   const validar = async () => {
     if (!archivo) return;
     setValidando(true);
+    alertaCarga.procesando("Leyendo el archivo…", archivo.name);
     try {
       const lec = await leerArchivo(archivo);
       setLectura(lec);
       setMapa(autoMapa(lec.cabeceras));
       setPaso(3);
+      alertaCarga.ok("Archivo leído", `${plural(lec.filas.length, "fila", "filas")} encontradas. Revisa el mapeo de columnas.`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo leer el archivo");
+      alertaCarga.error("No se pudo leer el archivo", motivoError(e, "Comprueba que no esté dañado ni protegido con contraseña."));
     } finally {
       setValidando(false);
     }
@@ -215,6 +217,7 @@ export function NuevaCargaRegistro({ onVolver, onIniciar }: Props) {
       detalle: f.nivel === "verde" ? "" : f.mensaje,
       detalleAceptado: `${f.original} → ${f.sistema} (original conservado)`,
     }));
+    alertaCarga.info("Lote iniciado", `Registro histórico · ${plural(items.length, "fila", "filas")}.`);
     onIniciar({
       codigo: `L-${ANIO_ACTUAL}-045`,
       tituloCarga: "Registro histórico",

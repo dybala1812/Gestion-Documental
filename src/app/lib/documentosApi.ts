@@ -49,3 +49,10 @@ export async function apiCrearDocumento(archivo: File, datos: NuevoDocumento): P
   // Sin Content-Type: el navegador agrega el boundary del multipart. Si sgdFetch fuerza JSON, hay que ajustarlo.
   return sgdFetch<Clasificado>("/documentos", { method: "POST", body: form });
 }
+/** Anula un documento (RF-AC-024): no se borra, queda "anulado" con motivo y auditado. */
+export async function apiAnularDocumento(documentoId: number, motivo: string): Promise<{ ok: boolean }> {
+  return sgdFetch<{ ok: boolean }>(`/documentos/${documentoId}/anular`, {
+    method: "POST",
+    body: JSON.stringify({ motivo }),
+  });
+}

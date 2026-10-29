@@ -14,7 +14,7 @@
  * Las librerías pesadas (docx-preview, exceljs) se cargan solo cuando se necesitan.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { sileo } from "sileo";
 import { Document, Page } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -362,7 +362,7 @@ export function VisorArchivos({ adjuntos }: { adjuntos: AdjuntoCom[] }) {
   }, [ampliado]);
 
   const descargar = () => {
-    if (!archivo || !sel) { toast.error("El archivo aún no está disponible"); return; }
+    if (!archivo || !sel) { sileo.error({ title: "El archivo aún no está disponible" }); return; }
     const a = document.createElement("a");
     a.href = archivo.url;
     a.download = sel.nombre_original;

@@ -6,7 +6,7 @@
  * Calcula la huella SHA-256 en el navegador; la detección de duplicados contra el archivo existente la hace el backend (TODO).
  */
 import { useState } from "react";
-import { toast } from "sonner";
+import { alertaCarga, plural } from "../../lib/alertasCarga";
 import { ArrowLeft, ArrowRight, Check, FileText, FolderUp, GraduationCap, Info, Loader2, UploadCloud, Wand2, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { tamanoLegible, type ArchivoLote, type LoteData } from "./LoteDetalle";
@@ -139,11 +139,19 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
 
   const validar = async () => {
     setValidando(true);
+    alertaCarga.procesando(`Validando ${plural(archivos.length, "archivo", "archivos")}…`, "Se calcula la huella SHA-256 de cada uno.");
     try {
-      setResultados(await evaluar(archivos));
+      const evaluados = await evaluar(archivos);
+      setResultados(evaluados);
       setPaso(3);
+      const ok = evaluados.filter(r => r.nivel === "verde").length;
+      const dup = evaluados.filter(r => r.nivel === "amarillo").length;
+      const err = evaluados.filter(r => r.nivel === "rojo").length;
+      const resumen = `${ok} listos · ${dup} duplicados · ${err} con error`;
+      if (err > 0 || dup > 0) alertaCarga.aviso("Validación terminada con observaciones", resumen);
+      else alertaCarga.ok("Validación terminada", resumen);
     } catch {
-      toast.error("No se pudieron validar los archivos");
+      alertaCarga.error("No se pudieron validar los archivos", "Vuelve a seleccionarlos e intenta de nuevo.");
     } finally {
       setValidando(false);
     }
@@ -160,6 +168,7 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
       estado: r.nivel === "verde" ? "Pendiente" : r.nivel === "amarillo" ? "Duplicado" : "Error",
       detalle: r.nivel === "verde" ? "" : r.mensaje,
     }));
+    alertaCarga.info("Lote iniciado", `Historias académicas masivas · ${plural(items.length, "archivo", "archivos")}.`);
     onIniciar({
       codigo: `L-${ANIO_ACTUAL}-044`,
       tituloCarga: "Historias académicas masivas",

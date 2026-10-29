@@ -23,17 +23,41 @@ const SGD_DEV_TOKEN: string | null =
 export const SGD_API_BASE = import.meta.env.VITE_SGD_API_URL ?? "http://localhost:3000/api";
 
 /**
- * Crea el ApiError con el motivo REAL que devuelve el backend SGD.
- * El backend responde { error, detalle?, campo? }; ApiError (de NOVA/Django) solo lee `detail`
- * y si no lo encuentra muestra un texto genérico por código HTTP ("Los datos enviados no son
- * válidos…"), que oculta la causa. Aquí se copia el motivo a `detail`.
+ * Texto del error según el contrato del backend SGD (RN-AC-15):
+ *  - formulario (4xx): { error: "<descripción>", campo?, tipo? } → la descripción tal cual.
+ *  - sistema (5xx): { error: "<número>", motivo: "<por qué>", consecutivo? } → "Error 1001: … (consecutivo …)".
+ * Acepta también la forma anterior { error, detalle? }.
+ */
+export function mensajeErrorSgd(cuerpo: Record<string, unknown> | null | undefined): string | null {
+  if (!cuerpo) return null;
+  const error = typeof cuerpo.error === "string" ? cuerpo.error : null;
+  const motivo = typeof cuerpo.motivo === "string" ? cuerpo.motivo : null;
+  if (motivo) {
+    const consecutivo = typeof cuerpo.consecutivo === "string" ? ` (consecutivo ${cuerpo.consecutivo})` : "";
+    return `${error ? `Error ${error}: ` : ""}${motivo}${consecutivo}`;
+  }
+  const detalle = typeof cuerpo.detalle === "string" ? cuerpo.detalle : null;
+  return error && detalle && !error.includes(detalle) ? `${error}: ${detalle}` : (error ?? detalle);
+}
+
+/**
+ * Crea el ApiError con el motivo REAL que devuelve el backend SGD. ApiError (de NOVA/Django) solo
+ * lee `detail` y si no lo encuentra muestra un texto genérico por código HTTP ("Los datos enviados
+ * no son válidos…"), que oculta la causa. Aquí se copia el mensaje a `detail`.
  */
 function errorSgd(status: number, cuerpo: Record<string, unknown>): ApiError {
-  const detalle = typeof cuerpo.detalle === "string" ? cuerpo.detalle : null;
-  const error = typeof cuerpo.error === "string" ? cuerpo.error : null;
-  // "Datos inválidos: cuerpo es obligatorio" ya trae el motivo; si no, se usa detalle o error.
-  const motivo = error && detalle && !error.includes(detalle) ? `${error}: ${detalle}` : (error ?? detalle);
-  return new ApiError(status, motivo ? { detail: motivo } : cuerpo);
+  const mensaje = mensajeErrorSgd(cuerpo);
+  // `campo` y `tipo` van como propiedades del error (no en `data`): así un formulario puede
+  // marcar el campo sin que formatApiError los agregue al mensaje.
+  return Object.assign(new ApiError(status, mensaje ? { detail: mensaje } : cuerpo), {
+    campo: typeof cuerpo.campo === "string" ? cuerpo.campo : undefined,
+    tipo: typeof cuerpo.tipo === "string" ? cuerpo.tipo : undefined,
+  });
+}
+
+/** Campo del formulario que señaló el backend SGD en un error (p. ej. "codigo" repetido). */
+export function campoDelError(e: unknown): string | undefined {
+  return (e as { campo?: string } | null)?.campo;
 }
 
 /**

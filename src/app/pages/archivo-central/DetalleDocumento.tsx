@@ -4,12 +4,13 @@
  * Visor del PDF, ruta en el archivo, ficha de datos y acciones (anular, descargar, editar).
  * Mismo estilo que Comunicaciones › Bandeja. Aún no llama al backend (ver los TODO).
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
-  ArrowLeft, ArrowRight, Ban, ChevronLeft, ChevronRight, Download, FileText, FolderOpen, Pencil,
+  ArrowLeft, ArrowRight, Ban, Download, FileText, FolderOpen, Loader2, Pencil,
 } from "lucide-react";
-import { apiDescargarArchivo } from "../../lib/comunicacionesApi";
+import { apiAnularDocumento } from "../../lib/documentosApi";
+import { VisorDocumento, guardarArchivoDescargado, useArchivoDocumento } from "./VisorDocumento";
 
 export type TipoDocumento = "Entrada" | "Salida" | "Interno";
 
@@ -38,108 +39,33 @@ const panel = "rounded-xl border border-[rgba(30,58,95,0.09)] bg-white shadow-sm
 const input =
   "h-8 w-full rounded-md border border-[rgba(30,58,95,0.15)] bg-white px-2 text-sm font-semibold text-[#2c3e50] focus:border-[#e8740e] focus:outline-none focus:ring-2 focus:ring-[#e8740e]/30";
 
-/* ───────────────────── Visor del PDF ───────────────────── */
-function Visor({ archivo, paginas, url, cargando, error, onDescargar }: {
-  archivo: string;
-  paginas: number;
-  /** URL (blob) del PDF real; null = aún no hay archivo conectado. */
-  url: string | null;
-  cargando: boolean;
-  error: string | null;
-  onDescargar: () => void;
-}) {
-  const [pagina, setPagina] = useState(1);
-  return (
-    <section className={`${panel} flex h-full flex-col overflow-hidden`}>
-      <div className="flex items-center gap-3 bg-[#1e3a5f] px-4 py-3 text-white">
-        <FileText className="h-4 w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{archivo}</span>
-        <button aria-label="Página anterior" disabled={pagina <= 1} onClick={() => setPagina(p => p - 1)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40">
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <span className="text-xs tabular-nums">{pagina} / {paginas}</span>
-        <button aria-label="Página siguiente" disabled={pagina >= paginas} onClick={() => setPagina(p => p + 1)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40">
-          <ChevronRight className="h-4 w-4" />
-        </button>
-        <button aria-label="Descargar PDF" onClick={onDescargar} className="rounded p-1 hover:bg-white/10">
-          <Download className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="flex flex-1 flex-col bg-[#ede6d8] p-3">
-        {url ? (
-          <iframe
-            title={archivo}
-            src={`${url}#page=${pagina}&view=FitH`}
-            className="min-h-[640px] w-full flex-1 rounded bg-white shadow-sm"
-          />
-        ) : (
-          <div className="flex min-h-[460px] flex-1 flex-col items-center justify-center gap-2 rounded bg-white p-6 text-center shadow-sm">
-            <FileText className="h-10 w-10 text-[#6b7a8d]" />
-            {cargando ? (
-              <p className="text-sm font-semibold text-[#2c3e50]">Cargando el documento…</p>
-            ) : error ? (
-              <>
-                <p className="text-sm font-semibold text-red-700">No se pudo abrir el PDF</p>
-                <p className="text-xs text-[#6b7a8d]">{error}</p>
-              </>
-            ) : (
-              <p className="text-sm font-semibold text-[#2c3e50]">Vista previa de la página {pagina}</p>
-            )}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 /* ───────────────────── Componente ───────────────────── */
-export function DetalleDocumento({ documento, archivoId, textoVolver = "Volver al archivo", onVolver, onAbrirCarpeta }: {
+export function DetalleDocumento({ documento, documentoId, archivoId, textoVolver = "Volver al archivo", onVolver, onAbrirCarpeta, onAnulado }: {
   documento: DocumentoDetalle;
+  /** Id del documento en la base; sin él (datos de ejemplo) no se puede anular. */
+  documentoId?: number;
   /** Id del archivo en el almacenamiento; si viene, se muestra y descarga el PDF real. */
   archivoId?: string;
   textoVolver?: string;
   onVolver: () => void;
   onAbrirCarpeta?: () => void;
+  /** Se llama tras anular en el backend (p. ej. para refrescar la lista). */
+  onAnulado?: () => void;
 }) {
-  const [urlPdf, setUrlPdf] = useState<string | null>(null);
-  const [cargandoPdf, setCargandoPdf] = useState(!!archivoId);
-  const [errorPdf, setErrorPdf] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!archivoId) return;
-    let cancelado = false;
-    let objetoUrl: string | null = null;
-    setCargandoPdf(true);
-    setErrorPdf(null);
-    apiDescargarArchivo(archivoId)
-      .then(({ blob }) => {
-        if (cancelado) return;
-        objetoUrl = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
-        setUrlPdf(objetoUrl);
-      })
-      .catch(e => { if (!cancelado) setErrorPdf(e instanceof Error ? e.message : "No se pudo descargar el archivo"); })
-      .finally(() => { if (!cancelado) setCargandoPdf(false); });
-    return () => {
-      cancelado = true;
-      if (objetoUrl) URL.revokeObjectURL(objetoUrl);
-    };
-  }, [archivoId]);
+  const archivo = useArchivoDocumento(archivoId);
 
   const descargar = () => {
-    if (!urlPdf) {
-      toast.info(cargandoPdf ? "El documento todavía se está cargando" : "Este documento no tiene un archivo disponible");
-      return;
+    if (!guardarArchivoDescargado(archivo, documento.archivo)) {
+      toast.info(archivo.cargando ? "El documento todavía se está cargando" : "Este documento no tiene un archivo disponible");
     }
-    const a = document.createElement("a");
-    a.href = urlPdf;
-    a.download = documento.archivo;
-    a.click();
   };
 
   const [doc, setDoc] = useState(documento);
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState({ contraparte: "", persona: "", caja: "", carpeta: "" });
   const [confirmando, setConfirmando] = useState(false);
+  const [motivoAnulacion, setMotivoAnulacion] = useState("");
+  const [anulando, setAnulando] = useState(false);
 
   const anulado = doc.estado === "Anulado";
   const numero = doc.consecutivo.split("/")[0];
@@ -155,12 +81,31 @@ export function DetalleDocumento({ documento, archivoId, textoVolver = "Volver a
     setEditando(false);
     toast.success("Datos actualizados");
   };
-  const anular = () => {
-    // TODO: anular el documento en el backend (no se elimina: queda marcado como anulado y auditado).
-    setDoc(d => ({ ...d, estado: "Anulado" }));
-    setConfirmando(false);
-    setEditando(false);
-    toast.success("Documento anulado");
+  /** Anula en el backend (RF-AC-024): no se elimina, queda marcado como anulado, con motivo y auditado. */
+  const anular = async () => {
+    const motivo = motivoAnulacion.trim();
+    if (!documentoId) {
+      toast.info("Este documento es de ejemplo: no se puede anular");
+      return;
+    }
+    if (!motivo) {
+      toast.error("Escribe el motivo de la anulación");
+      return;
+    }
+    setAnulando(true);
+    try {
+      await apiAnularDocumento(documentoId, motivo);
+      setDoc(d => ({ ...d, estado: "Anulado" }));
+      setConfirmando(false);
+      setEditando(false);
+      setMotivoAnulacion("");
+      toast.success("Documento anulado", { description: "Sigue en el archivo marcado como anulado; la acción quedó en la auditoría." });
+      onAnulado?.();
+    } catch (e) {
+      toast.error("No se pudo anular el documento", { description: e instanceof Error ? e.message : undefined });
+    } finally {
+      setAnulando(false);
+    }
   };
 
   /** Valor editable cuando se está en modo edición. */
@@ -224,16 +169,33 @@ export function DetalleDocumento({ documento, archivoId, textoVolver = "Volver a
       {confirmando && (
         <div role="alertdialog" aria-label="Confirmar anulación" className="rounded-xl border border-red-200 bg-red-50 p-4">
           <p className="text-sm font-bold text-red-800">¿Anular este documento?</p>
-          <p className="mt-0.5 text-sm text-red-700">No se elimina: queda marcado como anulado en el archivo.</p>
+          <p className="mt-0.5 text-sm text-red-700">No se elimina: queda marcado como anulado en el archivo, con el motivo y quién lo hizo.</p>
+          <label className="mt-3 block">
+            <span className="mb-1 block text-xs font-bold text-red-800">Motivo de la anulación *</span>
+            <textarea
+              value={motivoAnulacion}
+              onChange={e => setMotivoAnulacion(e.target.value)}
+              rows={2}
+              maxLength={500}
+              placeholder="Ej.: se cargó en la dependencia equivocada"
+              className="w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-[#2c3e50] focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-200"
+            />
+          </label>
           <div className="mt-3 flex gap-2">
-            <button onClick={anular} className="h-9 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:opacity-90">Sí, anular</button>
-            <button onClick={() => setConfirmando(false)} className="h-9 rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 hover:bg-red-100">Cancelar</button>
+            <button
+              onClick={anular}
+              disabled={anulando || !motivoAnulacion.trim()}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {anulando && <Loader2 className="h-4 w-4 animate-spin" />} Sí, anular
+            </button>
+            <button onClick={() => { setConfirmando(false); setMotivoAnulacion(""); }} disabled={anulando} className="h-9 rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">Cancelar</button>
           </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Visor archivo={doc.archivo} paginas={doc.paginas} url={urlPdf} cargando={cargandoPdf} error={errorPdf} onDescargar={descargar} />
+        <VisorDocumento titulo={doc.archivo} paginas={doc.paginas} archivo={archivo} onDescargar={descargar} sinArchivo={`Vista previa de ${doc.archivo}`} />
 
         <div className="space-y-4">
           {/* ── Ruta en el archivo ──────────────────────────────────────── */}
@@ -280,7 +242,7 @@ export function DetalleDocumento({ documento, archivoId, textoVolver = "Volver a
                   onClick={descargar}
                   className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-4 text-sm font-semibold text-[#1e3a5f] hover:bg-[#f3ede1]"
                 >
-                  <Download className="h-4 w-4" /> Descargar PDF
+                  <Download className="h-4 w-4" /> Descargar archivo
                 </button>
                 <button
                   disabled={anulado}

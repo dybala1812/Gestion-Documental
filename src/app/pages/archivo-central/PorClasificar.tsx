@@ -38,6 +38,7 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
           origen: d.origen ?? "Documento individual",
           fechaCarga: d.cargado_en ? formatoFecha(d.cargado_en.slice(0, 10)) : "—",
           paginas: d.paginas ?? 1,
+          archivoId: d.archivo_id,
         })));
       })
       .catch(e => { if (!cancelado) setError(e instanceof Error ? e.message : "No se pudieron cargar los documentos"); })
@@ -145,7 +146,19 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
             </thead>
             <tbody>
               {visibles.map(d => (
-                <tr key={d.id} className="border-t border-[rgba(30,58,95,0.09)] hover:bg-[#f3ede1]/40">
+                // Toda la fila abre el visor, igual que el botón Clasificar (SGD-088).
+                <tr
+                  key={d.id}
+                  tabIndex={0}
+                  aria-label={`Clasificar ${d.nombre}`}
+                  onClick={() => setClasificando(documentos.findIndex(x => x.id === d.id))}
+                  onKeyDown={e => {
+                    if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+                    e.preventDefault();
+                    setClasificando(documentos.findIndex(x => x.id === d.id));
+                  }}
+                  className="cursor-pointer border-t border-[rgba(30,58,95,0.09)] hover:bg-[#f3ede1]/40 focus-visible:bg-[#f3ede1]/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#1e3a5f]"
+                >
                   <td className="whitespace-nowrap px-4 py-3">
                     <span className="flex items-center gap-2">
                       <FileText className="h-4 w-4 shrink-0 text-[#6b7a8d]" />
@@ -166,7 +179,7 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <button
-                      onClick={() => setClasificando(documentos.findIndex(x => x.id === d.id))}
+                      onClick={e => { e.stopPropagation(); setClasificando(documentos.findIndex(x => x.id === d.id)); }}
                       className="rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 py-1.5 text-xs font-semibold text-[#1e3a5f] hover:bg-[#f3ede1]"
                     >
                       Clasificar

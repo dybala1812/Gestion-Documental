@@ -5,7 +5,7 @@
  * Mismo estilo que Comunicaciones › Bandeja. Por ahora no llama al backend (ver TODO en `crearLote`).
  */
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { alertaCarga, motivoError, plural } from "../../lib/alertasCarga";
 import { apiListDependenciasCom, type DependenciaCom } from "../../lib/comunicacionesApi";
 import { apiCrearDocumento, apiListAsuntos, type AsuntoCat } from "../../lib/documentosApi";
 import {
@@ -93,7 +93,7 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
   const [asuntos, setAsuntos] = useState<AsuntoCat[]>([]);
 
   useEffect(() => {
-    apiListDependenciasCom().then(setDependencias).catch(() => toast.error("No se pudieron cargar las dependencias"));
+    apiListDependenciasCom().then(setDependencias).catch(e => alertaCarga.error("No se pudieron cargar las dependencias", motivoError(e, "Revisa la conexión con el servidor e intenta de nuevo.")));
   }, []);
 
   // Al cambiar la dependencia se cargan sus asuntos y se limpia el asunto elegido.
@@ -104,7 +104,7 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
     let cancelado = false;
     apiListAsuntos(Number(datos.dependencia))
       .then(a => { if (!cancelado) setAsuntos(a); })
-      .catch(() => toast.error("No se pudieron cargar los asuntos"));
+      .catch(e => alertaCarga.error("No se pudieron cargar los asuntos", motivoError(e, "Revisa la conexión con el servidor e intenta de nuevo.")));
     return () => { cancelado = true; };
   }, [datos.dependencia]);
 
@@ -140,6 +140,11 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
     let guardados = 0;
     let duplicados = 0;
     const fallos: string[] = [];
+    const porSubir = resultados.filter(r => r.nivel !== "rojo").length;
+    alertaCarga.procesando(
+      `Cargando ${plural(porSubir, "documento", "documentos")}…`,
+      "No cierres esta ventana hasta que termine.",
+    );
     try {
       for (const r of resultados) {
         if (r.nivel === "rojo") continue;
@@ -161,13 +166,27 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
           else fallos.push(`${r.archivo.name}: ${msg}`);
         }
       }
-      if (guardados > 0) {
-        toast.success(`${guardados} documento(s) cargado(s)` + (duplicados ? ` · ${duplicados} duplicado(s)` : ""));
-      } else if (duplicados > 0 && fallos.length === 0) {
-        toast.warning(`${duplicados} documento(s) ya estaban cargados`);
+      // Sileo muestra una alerta a la vez (la nueva reemplaza a la anterior): se avisa UNA sola vez, con todo el resumen.
+      const resumen = [
+        guardados ? plural(guardados, "cargado", "cargados") : "",
+        duplicados ? plural(duplicados, "duplicado (ya estaba cargado)", "duplicados (ya estaban cargados)") : "",
+        fallos.length ? plural(fallos.length, "con error", "con error") : "",
+      ].filter(Boolean).join(" · ");
+      const primerFallo = fallos[0] ? `${fallos[0]}${fallos.length > 1 ? ` (y ${fallos.length - 1} más)` : ""}` : "";
+      if (guardados === 0 && fallos.length > 0) {
+        alertaCarga.error(fallos.length === 1 ? "No se pudo cargar el documento" : "No se pudieron cargar los documentos", primerFallo);
+      } else if (fallos.length > 0) {
+        alertaCarga.aviso(`Carga terminada con problemas: ${resumen}`, primerFallo);
+      } else if (duplicados > 0) {
+        alertaCarga.aviso(
+          guardados > 0 ? `Carga terminada: ${resumen}` : duplicados === 1 ? "El documento ya estaba cargado" : "Los documentos ya estaban cargados",
+          guardados > 0 ? "Los duplicados no se guardaron de nuevo." : "No se guardó nada nuevo: el mismo archivo ya existe en este expediente.");
+      } else {
+        alertaCarga.ok(plural(guardados, "documento cargado", "documentos cargados"), `En ${nombreDependencia}${nombreAsunto ? ` · ${nombreAsunto}` : ""}.`);
       }
-      if (fallos.length > 0) toast.error(fallos[0] + (fallos.length > 1 ? ` (y ${fallos.length - 1} más)` : ""));
       if (fallos.length === 0) onVolver();
+    } catch (e) {
+      alertaCarga.error("La carga se interrumpió", motivoError(e));
     } finally {
       setCreando(false);
     }

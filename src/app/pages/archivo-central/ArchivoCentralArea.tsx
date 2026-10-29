@@ -8,7 +8,10 @@
  *  · Celular/tablet: el menú se abre como panel lateral desde el botón "Menú".
  * Por ahora están listas las secciones de Comunicaciones; las demás indican "Próximamente".
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { sileo, Toaster as SileoToaster } from "sileo";
+import "sileo/styles.css";
 import {
   Home, Upload, Truck, Inbox, FolderCheck, Archive, Search, GraduationCap,
   Mail, MailQuestion, History, BookOpen, FileText, Shield, PanelLeftClose, PanelLeftOpen,
@@ -23,6 +26,10 @@ import { Inicio } from "./Inicio";
 import { PorClasificar } from "./PorClasificar";
 import { Clasificados } from "./Clasificados";
 import { Archivo } from "./Archivo";
+import { CatalogosArea } from "./CatalogosArea";
+import { PlantillasArea } from "./PlantillasArea";
+import { AuditoriaArea } from "./AuditoriaArea";
+import { apiListComunicaciones } from "../../lib/comunicacionesApi";
 
 type SeccionKey =
   | "inicio" | "centro-cargas" | "transferencias" | "por-clasificar" | "clasificados"
@@ -77,9 +84,9 @@ const menuGroups: MenuGroup[] = [
   {
     title: "Administración",
     items: [
-      { key: "catalogos", label: "Catálogos", icon: BookOpen },
-      { key: "plantillas", label: "Plantillas de correo", icon: FileText },
-      { key: "auditoria", label: "Auditoría", icon: Shield },
+      { key: "catalogos", label: "Catálogos", icon: BookOpen, disponible: true },
+      { key: "plantillas", label: "Plantillas de correo", icon: FileText, disponible: true },
+      { key: "auditoria", label: "Auditoría", icon: Shield, disponible: true },
     ],
   },
 ];
@@ -128,6 +135,38 @@ export function ArchivoCentralArea() {
   const areaNombre = usuario?.dependencyName ?? "Archivo Central";
   const usuarioNombre = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ") || "Usuario";
   const actual = todosLosItems.find(i => i.key === seccion)!;
+
+  // ── Polling de nuevas comunicaciones: alerta y recarga de bandeja ─────────
+  const [recargarBandeja, setRecargarBandeja] = useState(0);
+  const ultimaComunicacionId = useRef<number | null>(null);
+
+  useEffect(() => {
+    const consultar = async () => {
+      try {
+        const lista = await apiListComunicaciones({ estado: "nueva", limite: 1 });
+        const ultima = lista[0];
+        if (!ultima) return;
+        if (ultimaComunicacionId.current && ultima.id !== ultimaComunicacionId.current) {
+          sileo.info({
+            title: `Nueva comunicación: ${ultima.consecutivo}`,
+            description: ultima.asunto || "Ha llegado un correo nuevo a la bandeja",
+          });
+          setRecargarBandeja(v => v + 1);
+        }
+        ultimaComunicacionId.current = ultima.id;
+      } catch {
+        // Silencioso: no saturar con errores de red.
+      }
+    };
+
+    consultar();
+    const intervalo = setInterval(consultar, 15000);
+    return () => clearInterval(intervalo);
+  }, []);
+
+  const actualizarUltimaComunicacionId = (id: number | undefined) => {
+    if (id) ultimaComunicacionId.current = id;
+  };
 
   /** Navega a una sección. Siempre limpia el tipo de transferencia: así el menú lleva a la lista. */
   const elegir = (key: SeccionKey) => {
@@ -198,6 +237,9 @@ export function ArchivoCentralArea() {
 
   return (
     <div className="bg-[#f3ede1] flex items-stretch min-h-[calc(100vh-80px)]">
+      {/* En el body: AreaDashboard envuelve el módulo en un div con animate-fade-slide-up (termina en translateY(0)),
+          que atrapa a todo lo "fixed" y haría que la alerta se desplace con la página. */}
+      {createPortal(<SileoToaster position="top-center" />, document.body)}
       {/* ── Menú lateral (escritorio) ──────────────────────────────────── */}
       <aside
         className={`hidden lg:flex flex-col shrink-0 bg-white border-r border-[rgba(30,58,95,0.12)] transition-[width] duration-300 ${colapsado ? "w-20" : "w-72"}`}
@@ -263,12 +305,20 @@ export function ArchivoCentralArea() {
           </p>
         </div>
 
-        {seccionCom ? (
+        {seccion === "catalogos" ? (
+          <CatalogosArea usuarioNombre={usuarioNombre} />
+        ) : seccion === "plantillas" ? (
+          <PlantillasArea />
+        ) : seccion === "auditoria" ? (
+          <AuditoriaArea />
+        ) : seccionCom ? (
           <ComunicacionesArea
             areaNombre={areaNombre}
             usuarioNombre={usuarioNombre}
             seccion={seccionCom}
             onSeccionChange={s => setSeccion(desdeComunicaciones[s])}
+            recargarTrigger={recargarBandeja}
+            onUltimaComunicacionId={actualizarUltimaComunicacionId}
           />
         ) : seccion === "centro-cargas" ? (
           <CentroDeCargas onIrATransferencias={irATransferencias} />

@@ -6,7 +6,7 @@
  * Remitir, Devolver, Enviar respuesta y Anular (RF-AC-016, RF-AC-017, RF-AC-024).
  */
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { sileo } from "sileo";
 import {
   ArrowLeft, Ban, Bell, Check, ChevronRight, Clock, CornerUpLeft, Inbox, Loader2, Mail, MailPlus, Send, Trash2, Undo2,
 } from "lucide-react";
@@ -263,33 +263,41 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
     setEnviando(true);
     try {
       if (accion === "remitir") {
-        if (!depId) { toast.error("Elige la dependencia"); return; }
+        if (!depId) { sileo.error({ title: "Elige la dependencia" }); return; }
         const r = await apiRemitirComunicacion(c.id, { dependencia_id: Number(depId), plazo_dias_habiles: plazo, mensaje, adjuntos: adjSel });
-        toast.success(`Remitida a ${dependencias.find(d => d.id === Number(depId))?.nombre}`,
-          r.fecha_limite ? { description: `Plazo hasta ${formatoFecha(r.fecha_limite)}` } : undefined);
+        sileo.success({
+          title: `Remitida a ${dependencias.find(d => d.id === Number(depId))?.nombre}`,
+          ...(r.fecha_limite ? { description: `Plazo hasta ${formatoFecha(r.fecha_limite)}` } : {}),
+        });
         onActualizada(r);
       } else if (accion === "devolver") {
-        if (!motivo.trim()) { toast.error("Indica qué falta en la respuesta"); return; }
+        if (!motivo.trim()) { sileo.error({ title: "Indica qué falta en la respuesta" }); return; }
         const r = await apiDevolverComunicacion(c.id, motivo);
-        toast.success("Devuelta a la dependencia");
+        sileo.success({ title: "Devuelta a la dependencia" });
         onActualizada(r);
       } else if (accion === "responder") {
-        if (!respCuerpo.trim()) { toast.error("Escribe la respuesta"); return; }
+        if (!respCuerpo.trim()) { sileo.error({ title: "Escribe la respuesta" }); return; }
         const entrada = await apiResponderRemitente(c.id, { asunto: respAsunto, cuerpo: respCuerpo, adjuntos: adjSel });
-        toast.success("Respuesta enviada a n8n", { description: "La comunicación se cerrará tras confirmar el envío del correo" });
+        sileo.success({
+          title: "Respuesta enviada a n8n",
+          description: "La comunicación se cerrará tras confirmar el envío del correo",
+        });
         onActualizada(entrada);
       } else if (accion === "responderDirecto") {
-        if (!respCuerpo.trim()) { toast.error("Escribe la respuesta"); return; }
+        if (!respCuerpo.trim()) { sileo.error({ title: "Escribe la respuesta" }); return; }
         await apiResponderDirecto(c.id, { asunto: respAsunto, cuerpo: respCuerpo, adjuntos: adjSel });
-        toast.success("Respuesta directa enviada a n8n", { description: "La comunicación se cerrará tras confirmar el envío del correo" });
+        sileo.success({
+          title: "Respuesta directa enviada a n8n",
+          description: "La comunicación se cerrará tras confirmar el envío del correo",
+        });
         // Refrescar desde el padre; mientras tanto no tenemos el objeto actualizado.
         onActualizada({ ...c, estado: "respondida_dependencia" } as Comunicacion);
       } else if (accion === "recordatorio") {
-        if (!recordCuerpo.trim()) { toast.error("Escribe el recordatorio"); return; }
+        if (!recordCuerpo.trim()) { sileo.error({ title: "Escribe el recordatorio" }); return; }
         await apiRecordatorioManual(c.id, { asunto: recordAsunto, cuerpo: recordCuerpo, adjuntos: adjSel });
-        toast.success("Recordatorio enviado");
+        sileo.success({ title: "Recordatorio enviado" });
       } else if (accion === "adicional") {
-        if (!adicionalCuerpo.trim()) { toast.error("Escribe el mensaje"); return; }
+        if (!adicionalCuerpo.trim()) { sileo.error({ title: "Escribe el mensaje" }); return; }
         const depDestino = adicionalDestino.startsWith("dep:") ? Number(adicionalDestino.slice(4)) : null;
         await apiCorreoAdicional(c.id, {
           destinatario_tipo: depDestino ? "dependencia" : "remitente",
@@ -298,17 +306,23 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
           cuerpo: adicionalCuerpo,
           adjuntos: adjSel,
         });
-        toast.success("Correo adicional enviado", depDestino
-          ? { description: `A ${dependencias.find(d => d.id === depDestino)?.nombre ?? "la dependencia"}` }
-          : undefined);
+        sileo.success({
+          title: "Correo adicional enviado",
+          ...(depDestino
+            ? { description: `A ${dependencias.find(d => d.id === depDestino)?.nombre ?? "la dependencia"}` }
+            : {}),
+        });
       } else if (accion === "anular") {
-        if (!motivo.trim()) { toast.error("El motivo es obligatorio"); return; }
+        if (!motivo.trim()) { sileo.error({ title: "El motivo es obligatorio" }); return; }
         const r = await apiAnularComunicacion(c.id, motivo);
-        toast.success("Comunicación anulada");
+        sileo.success({ title: "Comunicación anulada" });
         onActualizada(r);
       } else if (accion === "eliminar") {
         const r = await apiEliminarComunicacion(c.id);
-        toast.success("Comunicación eliminada", { description: `${r.consecutivo} y sus archivos fueron borrados` });
+        sileo.success({
+          title: "Comunicación eliminada",
+          description: `${r.consecutivo} y sus archivos fueron borrados`,
+        });
         onEliminada?.(c.id);
         setAccion(null);
         onClose();
@@ -316,7 +330,7 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
       }
       setAccion(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo completar la acción");
+      sileo.error({ title: e instanceof Error ? e.message : "No se pudo completar la acción" });
     } finally {
       setEnviando(false);
     }
