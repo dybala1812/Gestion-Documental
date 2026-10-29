@@ -12,9 +12,10 @@ import { NuevaCargaDocumento } from "./NuevaCargaDocumento";
 import { NuevaCargaHistorias } from "./NuevaCargaHistorias";
 import { NuevaCargaRegistro } from "./NuevaCargaRegistro";
 import { LoteDetalle, type LoteData } from "./LoteDetalle";
+import { Paginacion, usePaginacion } from "./Paginacion";
 import type { TipoEntrega } from "./Transferencias";
 import {
-  ArrowRight, FileInput, Archive, Upload, GraduationCap, FileSpreadsheet, Smartphone, User,
+  FileInput, Archive, Upload, GraduationCap, FileSpreadsheet, Smartphone,
 } from "lucide-react";
 
 type CargaId = "A" | "B" | "C" | "D" | "E" | "F";
@@ -60,6 +61,8 @@ interface Lote {
   errores: number;
 }
 
+const LOTES_POR_PAGINA = 10;
+
 const LOTES: Lote[] = [
   { lote: "L-2026-041", cargaId: "D", carga: "Historias académicas masivas", destino: "Graduados / 2023 / Pregrado / Derecho", usuario: "Diana Paz", fecha: "6 de oct de 2026", estado: "Con errores", aceptados: 117, duplicados: 2, errores: 1 },
   { lote: "L-2026-040", cargaId: "E", carga: "Registro histórico", destino: "Registro histórico 2024 · Recibidas", usuario: "Diana Paz", fecha: "3 de oct de 2026", estado: "Completado", aceptados: 211, duplicados: 3, errores: 0 },
@@ -80,23 +83,15 @@ function CargaCard({ carga, onSeleccionar }: { carga: Carga; onSeleccionar?: (id
     <button
       type="button"
       onClick={() => onSeleccionar?.(carga.id)}
-      className="group flex flex-col gap-3 rounded-xl border border-[rgba(30,58,95,0.09)] bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8740e]"
+      title={`${carga.descripcion} · ${carga.quien}`}
+      className="group flex min-w-0 flex-auto items-center gap-1 rounded-full border border-gray-200 bg-white py-1 pl-1 pr-2 min-[1440px]:pr-2.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#1e3a5f]/30 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8740e]"
     >
-      <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#1e3a5f] text-white">
-          <Icono className="h-5 w-5" aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#c89b14]">Carga {carga.id}</p>
-          <h3 className="text-[15px] font-bold leading-tight text-[#1e3a5f]">{carga.titulo}</h3>
-        </div>
-        <ArrowRight className="h-4 w-4 shrink-0 text-[#6b7a8d] transition-transform group-hover:translate-x-0.5 group-hover:text-[#e8740e]" aria-hidden />
-      </div>
-      <p className="flex-1 text-sm leading-relaxed text-[#6b7a8d]">{carga.descripcion}</p>
-      <p className="flex items-start gap-2 border-t border-[rgba(30,58,95,0.09)] pt-3 text-xs text-[#6b7a8d]">
-        <User className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-        <span>{carga.quien}</span>
-      </p>
+      <span className="mr-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#1e3a5f] text-white">
+        <Icono className="h-3 w-3" aria-hidden />
+      </span>
+      <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-[#c89b14]">{carga.id}</span>
+      <span className="min-w-0 truncate whitespace-nowrap text-[11px] min-[1440px]:text-xs font-semibold text-[#1e3a5f]">{carga.titulo}</span>
+      <span className="sr-only">. {carga.descripcion} {carga.quien}</span>
     </button>
   );
 }
@@ -119,7 +114,9 @@ function ProcesoComun() {
 
 function UltimosLotes({ lotes }: { lotes: Lote[] }) {
   const th = "px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-[#2c3e50]";
+  const pag = usePaginacion(lotes, LOTES_POR_PAGINA);
   return (
+    <div className="space-y-2">
     <div className="overflow-x-auto rounded-xl border border-[rgba(30,58,95,0.09)] bg-white shadow-sm">
       <table className="w-full min-w-[960px] border-collapse">
         <thead>
@@ -130,7 +127,7 @@ function UltimosLotes({ lotes }: { lotes: Lote[] }) {
           </tr>
         </thead>
         <tbody>
-          {lotes.map(l => {
+          {pag.visibles.map(l => {
             const e = ESTILO_ESTADO[l.estado];
             return (
               <tr key={l.lote} className="border-t border-[rgba(30,58,95,0.09)] transition-colors hover:bg-[#f3ede1]/40">
@@ -162,6 +159,9 @@ function UltimosLotes({ lotes }: { lotes: Lote[] }) {
           })}
         </tbody>
       </table>
+    </div>
+    <Paginacion pagina={pag.pagina} paginas={pag.paginas} desde={pag.desde} mostrados={pag.visibles.length}
+      total={pag.total} onCambiar={pag.setPagina} etiqueta="lotes" />
     </div>
   );
 }
@@ -214,7 +214,7 @@ export function CentroDeCargas({ onIrATransferencias }: CentroDeCargasProps) {
       </div>
 
       {/* ── Tipos de carga ──────────────────────────────────────────────── */}
-      <section aria-label="Tipos de carga" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section aria-label="Tipos de carga" className="flex flex-wrap gap-1 lg:flex-nowrap">
         {CARGAS.map(c => <CargaCard key={c.id} carga={c} onSeleccionar={abrirCarga} />)}
       </section>
 
