@@ -263,7 +263,14 @@ function CampusLookupGuard() {
 // ⚠️ TEMPORAL (ver la ruta "login-temporal").
 const LoginTemporal = LOGIN_TEMPORAL ? lazy(() => import("./pages/login-temporal/LoginTemporal")) : null;
 
+// Archivo Central · app del celular (PWA, RF-AC-022). Fuera del Layout: pantalla completa en el celular.
+const AppMovil = lazy(() => import("./pages/archivo-central/movil/AppMovil"));
+
 export const router = createBrowserRouter([
+  {
+    path: "/movil",
+    element: <Suspense fallback={<AuthSpinner />}><AppMovil /></Suspense>,
+  },
   {
     path: "/",
     Component: Layout,

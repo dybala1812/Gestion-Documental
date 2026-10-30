@@ -1,16 +1,19 @@
 /**
  * @file NuevaTransferencia.tsx
  * @description Archivo Central › Ingreso › Transferencias › Nueva transferencia.
- * Asistente de 3 pasos (según mockup): Datos → Inventario FUID → Revisión y acta.
- * Por ahora el paso 1 está completo; los pasos 2 y 3 son estructura base (ver TODO).
+ * Asistente de 3 pasos:
+ *   1. Datos (tipo, dependencia, año, responsable).
+ *   2. El Excel que entregó la dependencia, tal cual: queda como acta de entrega (no se lee ni se valida).
+ *   3. Física: formulario con el número de cajas, dónde quedó guardada cada una y observaciones (las cajas no se suben).
+ *      Digital: cargue masivo de los documentos (se guardan con la transferencia, no pasan a Por clasificar), sin más datos.
  * Regla de los dos años: en 2026 se transfiere hasta 2024; en 2027, hasta 2025.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { FuidInventario, resumenFuid, type FilaFuid } from "./FuidInventario";
-import { RevisionActa } from "./RevisionActa";
-import { SelectorBodega, textoBodega, useUbicacionesActivas } from "./UbicacionFisica";
-import { useAuth } from "../../context/AuthContext";
+import {
+  ActaExcel, DatosCajas, DocumentosDigitales, UbicacionCajas, problemasCaja, type DetalleCaja,
+} from "./TransferenciaPaso3";
+import { textoBodega, useUbicacionesActivas, type UbicacionBodega } from "./UbicacionFisica";
 import {
   ArrowLeft, ArrowRight, Check, CalendarCheck, CalendarX, Loader2, Save, X,
 } from "lucide-react";
@@ -23,17 +26,20 @@ const ANIO_ACTUAL = new Date().getFullYear();
 const ANIO_MAXIMO = ANIO_ACTUAL - 2; // regla de los dos años
 const ANIOS = Array.from({ length: ANIO_ACTUAL - 1989 }, (_, i) => ANIO_ACTUAL - i);
 
+// La base solo tiene "fisica" y "digital" (tipo_transferencia): "Física y digital" no se podía registrar.
 const TIPOS: { id: TipoEntrega; label: string }[] = [
   { id: "fisica", label: "Física" },
   { id: "digital", label: "Digital" },
-  { id: "ambas", label: "Física y digital" },
 ];
 
-const PASOS = [
+const pasosDe = (tipo: TipoEntrega) => [
   { titulo: "Datos", detalle: "Tipo, dependencia y año" },
-  { titulo: "Inventario FUID", detalle: "Excel con validación" },
-  { titulo: "Revisión y acta", detalle: "Cajas, carpetas, folios" },
+  { titulo: "Excel", detalle: "El que entregó la dependencia (acta)" },
+  tipo === "digital"
+    ? { titulo: "Documentos", detalle: "Cargue masivo de archivos" }
+    : { titulo: "Cajas", detalle: "Cuántas y dónde quedaron" },
 ];
+const MAX_CAJAS = 2000;
 
 const REQUISITOS = [
   "Ordenada por serie y subserie (asuntos, actas, comunicaciones, circulares)",
@@ -66,8 +72,6 @@ export function NuevaTransferencia({
   onVolver,
   tipoInicial = "fisica",
 }: { onVolver: () => void; tipoInicial?: TipoEntrega }) {
-  const { usuario } = useAuth();
-  const recibe = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ") || "Archivo Central";
   const [dependencias, setDependencias] = useState<string[]>([]);
   const [registrando, setRegistrando] = useState(false);
   const [paso, setPaso] = useState(1);
@@ -75,22 +79,59 @@ export function NuevaTransferencia({
   const [datos, setDatos] = useState<Datos>({
     dependencia: "", contenido: CONTENIDOS[0], anio: String(ANIO_MAXIMO), responsable: "", ubicacion: "",
   });
-  const [filas, setFilas] = useState<FilaFuid[]>([]);
-  const [fuidNombre, setFuidNombre] = useState("");
-  const [bodegaId, setBodegaId] = useState("");
-  const ubicaciones = useUbicacionesActivas();
+  /** Acta de entrega: el Excel que entregó la dependencia, tal cual (se sube al registrar). */
+  const [acta, setActa] = useState<File | null>(null);
+  /** Física: cuántas cajas llegaron y observaciones de la entrega. */
+  const [numeroCajas, setNumeroCajas] = useState("");
+  const [observaciones, setObservaciones] = useState("");
+  /** Física: caja → lo que va en su rótulo (contenido, carpetas, fechas, folios). */
+  const [detalleCaja, setDetalleCaja] = useState<Record<string, DetalleCaja>>({});
+  /** Física: caja → id de la ubicación donde quedó guardada. */
+  const [ubicacionCaja, setUbicacionCaja] = useState<Record<string, string>>({});
+  /** Digital: los documentos que entregó la dependencia. */
+  const [documentos, setDocumentos] = useState<File[]>([]);
+  const [progreso, setProgreso] = useState("");
+  const delCatalogo = useUbicacionesActivas();
+  const [creadas, setCreadas] = useState<UbicacionBodega[]>([]);
+  const ubicaciones = useMemo(
+    () => [...delCatalogo, ...creadas.filter(c => !delCatalogo.some(u => u.id === c.id))],
+    [delCatalogo, creadas],
+  );
 
   const set = (k: keyof Datos) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setDatos(d => ({ ...d, [k]: e.target.value }));
 
+  const PASOS = pasosDe(tipo);
   const anioPermitido = Number(datos.anio) <= ANIO_MAXIMO;
-  const pideUbicacion = tipo === "fisica" || tipo === "ambas";
-  const fuid = resumenFuid(filas, Number(datos.anio));
+  const esFisica = tipo !== "digital";
+
+  // Cajas 1..N según el número de cajas que llegaron.
+  const n = Number(numeroCajas);
+  const numeroValido = Number.isInteger(n) && n >= 1 && n <= MAX_CAJAS;
+  const cajas = useMemo(
+    () => (numeroValido ? Array.from({ length: n }, (_, i) => ({ caja: String(i + 1) })) : []),
+    [n, numeroValido],
+  );
+  const cajasSinUbicacion = cajas.filter(c => !ubicacionCaja[c.caja]).length;
+
+  // "Ubicación en bodega" del acta y de la transferencia: cada ubicación con sus cajas.
+  const ubicacionTexto = useMemo(() => {
+    const porUbic = new Map<string, string[]>();
+    for (const c of cajas) {
+      const u = ubicaciones.find(x => String(x.id) === ubicacionCaja[c.caja]);
+      if (u) porUbic.set(textoBodega(u), [...(porUbic.get(textoBodega(u)) ?? []), c.caja]);
+    }
+    return [...porUbic].map(([u, cs]) => `${u} (caja${cs.length > 1 ? "s" : ""} ${cs.join(", ")})`).join("; ");
+  }, [cajas, ubicaciones, ubicacionCaja]);
 
   const puedeContinuar =
     (paso === 1 && !!datos.dependencia && !!datos.responsable.trim() && anioPermitido) ||
-    (paso === 2 && filas.length > 0 && fuid.errores === 0) ||
-    paso === 3;
+    (paso === 2 && !!acta);
+  // Último paso: física → cajas con ubicación; digital → al menos un documento.
+  const cajasConProblemas = cajas.filter(c => problemasCaja(detalleCaja[c.caja], Number(datos.anio)).length > 0).length;
+  const listoParaRegistrar = !!acta && (esFisica
+    ? cajas.length > 0 && cajasSinUbicacion === 0 && cajasConProblemas === 0
+    : documentos.length > 0);
 
   // Las dependencias salen de la base de datos (las mismas del módulo de Comunicaciones).
   useEffect(() => {
@@ -107,25 +148,63 @@ export function NuevaTransferencia({
   const enviar = async () => {
     setRegistrando(true);
     try {
+      setProgreso(acta ? "Subiendo el acta de entrega…" : "Registrando…");
+      const actaId = acta ? await transferenciasApi.subirActa(acta, Number(datos.anio)) : undefined;
+      setProgreso("Registrando la transferencia…");
       const r = await transferenciasApi.crear({
+        acta_archivo_id: actaId,
         dependencia: datos.dependencia,
         anio: Number(datos.anio),
         tipo,
         contenido: datos.contenido,
         responsable: datos.responsable.trim(),
-        ubicacion: pideUbicacion ? datos.ubicacion.trim() : "",
-        carpetas: filas.map(f => ({
-          caja: f.caja.trim(), carpeta: f.carpeta.trim(), asunto: f.asunto.trim(),
-          fechaInicial: f.fechaInicial, fechaFinal: f.fechaFinal,
-          folios: Number(f.folios), docs: Number(f.docs), descripcion: f.descripcion.trim(),
-        })),
+        ubicacion: esFisica ? ubicacionTexto : "",
+        cajas: esFisica ? cajas.map(c => ({ caja: c.caja, ubicacion_id: Number(ubicacionCaja[c.caja]) })) : undefined,
+        observaciones: esFisica ? observaciones.trim() : undefined,
+        total_documentos: esFisica ? undefined : documentos.length,
+        // El detalle de los documentos está en el Excel (acta). Física: una fila por caja con lo que va en su rótulo.
+        carpetas: esFisica
+          ? cajas.map(c => {
+              const d = detalleCaja[c.caja];
+              return {
+                caja: c.caja, carpeta: d?.carpetas.trim() ?? "", asunto: d?.contenido.trim() ?? "",
+                fechaInicial: d?.fechaInicial || null, fechaFinal: d?.fechaFinal || null,
+                folios: Number(d?.folios) || 0, docs: 0, descripcion: d?.contenido.trim() ?? "",
+              };
+            })
+          : [],
       });
-      toast.success(`Transferencia registrada: ${r.codigo}`);
+
+      // Digital: ya registrada, se suben uno a uno los documentos (se guardan con la transferencia).
+      let subidos = 0, duplicados = 0;
+      const fallos: string[] = [];
+      if (!esFisica) {
+        for (const [i, f] of documentos.entries()) {
+          setProgreso(`Subiendo documentos ${i + 1} de ${documentos.length}…`);
+          try {
+            await transferenciasApi.subirDocumento(r.id, f);
+            subidos++;
+          } catch (e) {
+            if ((e as { status?: number }).status === 409 && /duplicad|ya fue cargado/i.test(String((e as Error).message))) duplicados++;
+            else fallos.push(`${f.name}: ${e instanceof Error ? e.message : "error"}`);
+          }
+        }
+      }
+
+      const detalle = [
+        !esFisica && `${subidos} documento(s) guardados con la transferencia`,
+        duplicados && `${duplicados} ya estaban cargados`,
+        fallos.length && `${fallos.length} con error (${fallos[0]}${fallos.length > 1 ? "…" : ""})`,
+        r.aviso,
+      ].filter(Boolean).join(" · ");
+      if (fallos.length || r.aviso) toast.warning(`Transferencia registrada: ${r.codigo}`, { description: detalle });
+      else toast.success(`Transferencia registrada: ${r.codigo}`, { description: detalle || undefined });
       onVolver(); // la lista se recarga sola y muestra la nueva
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo registrar la transferencia");
     } finally {
       setRegistrando(false);
+      setProgreso("");
     }
   };
 
@@ -223,21 +302,11 @@ export function NuevaTransferencia({
               </div>
             </div>
 
-            {pideUbicacion && (
-              <div className="space-y-2">
-                <p className="text-xs text-[#6b7a8d]">
-                  La <strong>caja</strong> y la <strong>carpeta</strong> de cada documento se registran en el inventario FUID (paso 2).
-                </p>
-                <SelectorBodega
-                  valor={bodegaId}
-                  onChange={id => {
-                    setBodegaId(id);
-                    setDatos(d => ({ ...d, ubicacion: textoBodega(ubicaciones.find(u => String(u.id) === id)) }));
-                  }}
-                  ubicaciones={ubicaciones}
-                />
-              </div>
-            )}
+            <p className="rounded-lg bg-[#f3ede1]/60 px-3 py-2 text-xs text-[#2c3e50]">
+              {esFisica
+                ? <>La dependencia entrega el <strong>Excel</strong> con la descripción de los documentos y las <strong>cajas</strong>. Las cajas no se suben: en el paso 3 registras dónde quedó guardada cada una.</>
+                : <>La dependencia entrega el <strong>Excel</strong> con la descripción de los documentos y los <strong>documentos</strong> en digital. En el paso 3 los subes.</>}
+            </p>
           </section>
 
           <div className="space-y-5">
@@ -273,25 +342,30 @@ export function NuevaTransferencia({
         </div>
       )}
 
-      {paso === 2 && (
-        <FuidInventario
-          filas={filas}
-          nombreArchivo={fuidNombre}
-          anio={Number(datos.anio)}
-          onFilas={setFilas}
-          onNombreArchivo={setFuidNombre}
-        />
+      {paso === 2 && <ActaExcel archivo={acta} onArchivo={setActa} />}
+
+      {paso === 3 && esFisica && (
+        <DatosCajas numero={numeroCajas} onNumero={setNumeroCajas} observaciones={observaciones} onObservaciones={setObservaciones}>
+          {numeroValido ? (
+            <UbicacionCajas
+              cajas={cajas}
+              valor={ubicacionCaja}
+              onChange={setUbicacionCaja}
+              ubicaciones={ubicaciones}
+              onNuevaUbicacion={u => setCreadas(c => [...c, u])}
+              detalle={detalleCaja}
+              onDetalle={setDetalleCaja}
+              anio={Number(datos.anio)}
+            />
+          ) : (
+            <p className="rounded-xl border border-dashed border-[rgba(30,58,95,0.2)] bg-white px-5 py-6 text-center text-sm text-[#6b7a8d]">
+              Escribe el número de cajas (de 1 a {MAX_CAJAS}) para registrar dónde quedó guardada cada una.
+            </p>
+          )}
+        </DatosCajas>
       )}
 
-      {paso === 3 && (
-        <RevisionActa
-          datos={datos}
-          tipo={tipo}
-          filas={filas}
-          codigo={`TR-${ANIO_ACTUAL}-___`} // el código definitivo lo asigna el servidor al registrar
-          recibe={recibe}
-        />
-      )}
+      {paso === 3 && !esFisica && <DocumentosDigitales archivos={documentos} onChange={setDocumentos} />}
 
       {/* ── Acciones ────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[rgba(30,58,95,0.09)] pt-4">
@@ -315,11 +389,12 @@ export function NuevaTransferencia({
           ) : (
             <button
               onClick={enviar}
-              disabled={registrando}
+              disabled={registrando || !listoParaRegistrar}
+              title={listoParaRegistrar ? undefined : esFisica ? "Falta el número de cajas, la ubicación de alguna o revisar sus fechas y folios" : "Sube al menos un documento"}
               className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#e8740e] px-4 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {registrando && <Loader2 className="h-4 w-4 animate-spin" />}
-              Registrar transferencia
+              {registrando && progreso ? progreso : "Registrar transferencia"}
             </button>
           )}
         </div>

@@ -11,8 +11,23 @@ import { borrarSesionTemporal, leerSesionTemporal } from "./loginTemporal"; // �
 /**
  * URL base del backend SGD. Se lee de VITE_SGD_API_URL.
  * Si no está definida se asume el puerto por defecto de Next.js.
+ * Si apunta a "localhost" pero la página se abrió desde otro equipo de la red local (p. ej. la app
+ * móvil /movil en el celular), "localhost" sería ese otro equipo: se usa el mismo host de la página.
  */
-export const SGD_API_BASE = import.meta.env.VITE_SGD_API_URL ?? "http://localhost:3000/api";
+function baseApi(): string {
+  const url = (import.meta.env.VITE_SGD_API_URL ?? "http://localhost:3000/api").replace(/\/$/, "");
+  const locales = ["localhost", "127.0.0.1", "[::1]"];
+  if (typeof window === "undefined" || locales.includes(window.location.hostname)) return url;
+  try {
+    const u = new URL(url);
+    if (!locales.includes(u.hostname)) return url;
+    u.hostname = window.location.hostname;
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    return url;
+  }
+}
+export const SGD_API_BASE = baseApi();
 
 /**
  * Texto del error según el contrato del backend SGD (RN-AC-15):

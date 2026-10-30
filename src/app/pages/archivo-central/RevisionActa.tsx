@@ -6,7 +6,7 @@
  * Imprimir: cada zona (acta, rótulos de cajas, rótulos de carpetas) se imprime por separado con window.print().
  */
 import { useEffect } from "react";
-import { AlertTriangle, Check, Printer } from "lucide-react";
+import { AlertTriangle, Check, Download, FileSpreadsheet, Printer } from "lucide-react";
 import type { FilaFuid } from "./FuidInventario";
 import type { TipoEntrega } from "./Transferencias";
 
@@ -26,6 +26,13 @@ interface Props {
   fecha?: string;
   /** En la pantalla de detalle los totales y las verificaciones se muestran aparte. */
   ocultarResumen?: boolean;
+  /**
+   * Acta de entrega = el archivo que entregó la dependencia. Si viene, se muestra ese archivo en lugar
+   * del acta que arma el sistema (que queda solo para transferencias sin archivo).
+   */
+  actaArchivo?: { nombre: string; tamano?: number; onDescargar?: () => void; descargando?: boolean } | null;
+  /** Solo los rótulos (el acta se muestra aparte, con su vista previa). */
+  soloRotulos?: boolean;
 }
 
 /* ───────────────────────── Utilidades ───────────────────────── */
@@ -130,7 +137,7 @@ export function ListaVerificaciones({ items }: { items: { titulo: string; ok: bo
 }
 
 /* ───────────────────────── Componente ───────────────────────── */
-export function RevisionActa({ datos, tipo, filas, codigo, recibe, fecha: fechaTransferencia, ocultarResumen }: Props) {
+export function RevisionActa({ datos, tipo, filas, codigo, recibe, fecha: fechaTransferencia, ocultarResumen, actaArchivo, soloRotulos }: Props) {
   const r = calcular(filas);
   const actaNo = `ACT-${codigo}`;
 
@@ -172,8 +179,34 @@ export function RevisionActa({ datos, tipo, filas, codigo, recibe, fecha: fechaT
       {/* Verificaciones */}
       {!ocultarResumen && <ListaVerificaciones items={r.verificaciones} />}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+      <div className={`grid grid-cols-1 gap-6 ${soloRotulos ? "" : "xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"}`}>
         {/* ── Acta de entrega ─────────────────────────────────────────── */}
+        {soloRotulos ? null : actaArchivo ? (
+          <div>
+            <h3 className="mb-3 text-lg font-bold text-[#1e3a5f]">Acta de entrega</h3>
+            <div className="flex flex-wrap items-center gap-4 rounded-xl border border-[rgba(30,58,95,0.09)] bg-white p-5 shadow-sm">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#f3ede1] text-[#1e3a5f]">
+                <FileSpreadsheet className="h-6 w-6" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold text-[#2c3e50]">{actaArchivo.nombre}</span>
+                <span className="block text-xs text-[#6b7a8d]">
+                  Archivo entregado por {datos.dependencia || "la dependencia"}
+                  {actaArchivo.tamano ? ` · ${Math.max(1, Math.round(actaArchivo.tamano / 1024))} KB` : ""}
+                  {actaArchivo.onDescargar ? "" : " · se guarda al registrar la transferencia"}
+                </span>
+              </span>
+              {actaArchivo.onDescargar && (
+                <button
+                  type="button" onClick={actaArchivo.onDescargar} disabled={actaArchivo.descargando}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 text-xs font-semibold text-[#1e3a5f] hover:bg-[#f3ede1] disabled:opacity-50"
+                >
+                  <Download className="h-3.5 w-3.5" /> {actaArchivo.descargando ? "Descargando…" : "Descargar acta"}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
         <div>
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-lg font-bold text-[#1e3a5f]">Acta de entrega</h3>
@@ -215,6 +248,7 @@ export function RevisionActa({ datos, tipo, filas, codigo, recibe, fecha: fechaT
             </article>
           </div>
         </div>
+        )}
 
         {/* ── Rótulos ─────────────────────────────────────────────────── */}
         <div className="space-y-5">
