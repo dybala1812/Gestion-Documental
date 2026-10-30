@@ -7,7 +7,7 @@
  * permisos: un usuario de Dependencia solo encuentra lo de su dependencia.
  */
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, FileText, Loader2, Mail, RotateCcw, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, GraduationCap, Loader2, Mail, RotateCcw, Search } from "lucide-react";
 import { formatApiError } from "../../lib/api";
 import {
   apiArbolArchivo, apiBuscarArchivo, TIPO_LEGIBLE,
@@ -35,7 +35,8 @@ function fechaCorta(iso: string | null): string {
 }
 
 const consecutivoDe = (x: ResultadoBusqueda) =>
-  x.origen === "comunicacion"
+  x.origen === "historia" ? "Historia académica"
+  : x.origen === "comunicacion"
     ? x.consecutivo ?? "—"
     : x.consecutivo ? (x.consecutivo.includes("/") ? x.consecutivo : `${x.consecutivo}/${x.anio}`) : `— / ${x.anio}`;
 
@@ -106,9 +107,10 @@ export function BusquedaAvanzada({ onAbrirComunicacion }: { onAbrirComunicacion:
           carro: abierto.carro ?? "", estante: abierto.estante ?? "", bandeja: abierto.bandeja ?? "",
           caja: abierto.caja ?? "—", carpeta: abierto.carpeta ?? "—", ubicacion: abierto.ubicacion ?? null,
           archivo: abierto.titulo, paginas: 1,
-          origen: "—", estado: "Clasificado",
+          origen: abierto.origen === "historia" ? "Historia académica" : "—", estado: "Clasificado",
         }}
-        documentoId={abierto.id}
+        documentoId={abierto.origen === "historia" ? undefined : abierto.id}
+        soloConsulta={abierto.origen === "historia"}
         archivoId={abierto.archivo_id ?? undefined}
         onVolver={() => setAbierto(null)}
         onAnulado={() => { setAbierto(null); setFiltros((f) => (f ? { ...f } : f)); }}
@@ -190,6 +192,7 @@ export function BusquedaAvanzada({ onAbrirComunicacion }: { onAbrirComunicacion:
               <option value="todo">Documentos y comunicaciones</option>
               <option value="documentos">Solo documentos</option>
               <option value="comunicaciones">Solo comunicaciones</option>
+              <option value="historias">Solo historias académicas (título, nombre o cédula)</option>
             </select>
           </div>
           <div className="flex items-end gap-2">
@@ -245,7 +248,9 @@ export function BusquedaAvanzada({ onAbrirComunicacion }: { onAbrirComunicacion:
                       className="cursor-pointer border-t border-[rgba(30,58,95,0.09)] hover:bg-[#f3ede1]/40 focus-visible:bg-[#f3ede1]/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#1e3a5f]">
                       <td className="whitespace-nowrap px-4 py-3">
                         <p className="flex items-center gap-1.5 font-mono text-xs font-bold text-[#2c3e50]">
-                          {x.origen === "comunicacion" ? <Mail className="h-3.5 w-3.5 text-[#e8740e]" /> : <FileText className="h-3.5 w-3.5 text-[#6b7a8d]" />}
+                          {x.origen === "comunicacion" ? <Mail className="h-3.5 w-3.5 text-[#e8740e]" />
+                            : x.origen === "historia" ? <GraduationCap className="h-3.5 w-3.5 text-[#1e3a5f]" />
+                            : <FileText className="h-3.5 w-3.5 text-[#6b7a8d]" />}
                           {consecutivoDe(x)}
                         </p>
                         <p className="text-[11px] text-[#6b7a8d]">
@@ -257,11 +262,11 @@ export function BusquedaAvanzada({ onAbrirComunicacion }: { onAbrirComunicacion:
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-sm font-semibold text-[#2c3e50]">{x.titulo}</p>
-                        <p className="text-xs text-[#6b7a8d]">{x.origen === "comunicacion" ? "Comunicación" : "Documento"}</p>
+                        <p className="text-xs text-[#6b7a8d]">{x.origen === "comunicacion" ? "Comunicación" : x.origen === "historia" ? "Historia académica" : "Documento"}</p>
                       </td>
                       <td className="px-4 py-3 text-sm text-[#2c3e50]">{x.contraparte ?? "—"}</td>
                       <td className="px-4 py-3 text-xs text-[#6b7a8d]">
-                        {[x.dependencia, x.origen === "documento" ? x.anio : null, x.asunto, x.trd].filter(Boolean).join(" / ") || "—"}
+                        {[x.dependencia, x.origen !== "comunicacion" ? x.anio : null, x.asunto, x.trd].filter(Boolean).join(" / ") || "—"}
                       </td>
                     </tr>
                   );

@@ -13,7 +13,8 @@ export interface NodoDependencia { dependencia_id: number; codigo: string; nombr
 export type TipoCodigo = "ENT" | "SAL" | "INT";
 
 export interface ResultadoBusqueda {
-  origen: "documento" | "comunicacion";
+  /** "historia" = documento de una historia académica: titulo = título del documento, contraparte = estudiante, dependencia = programa. */
+  origen: "documento" | "comunicacion" | "historia";
   id: number;
   consecutivo: string | null;
   consecutivo_original: string | null;
@@ -57,7 +58,7 @@ export interface FiltrosBusqueda {
   persona?: string;
   trd?: string;
   texto?: string;
-  alcance?: "todo" | "documentos" | "comunicaciones";
+  alcance?: "todo" | "documentos" | "comunicaciones" | "historias";
 }
 
 export const TIPO_LEGIBLE: Record<TipoCodigo, "Entrada" | "Salida" | "Interno"> = { ENT: "Entrada", SAL: "Salida", INT: "Interno" };

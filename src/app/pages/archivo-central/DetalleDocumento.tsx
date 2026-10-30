@@ -47,7 +47,7 @@ const input =
   "h-8 w-full rounded-md border border-[rgba(30,58,95,0.15)] bg-white px-2 text-sm font-semibold text-[#2c3e50] focus:border-[#e8740e] focus:outline-none focus:ring-2 focus:ring-[#e8740e]/30";
 
 /* ───────────────────── Componente ───────────────────── */
-export function DetalleDocumento({ documento, documentoId, archivoId, textoVolver = "Volver al archivo", onVolver, onAbrirCarpeta, onAnulado }: {
+export function DetalleDocumento({ documento, documentoId, archivoId, textoVolver = "Volver al archivo", onVolver, onAbrirCarpeta, onAnulado, soloConsulta = false }: {
   documento: DocumentoDetalle;
   /** Id del documento en la base; sin él (datos de ejemplo) no se puede anular. */
   documentoId?: number;
@@ -58,6 +58,8 @@ export function DetalleDocumento({ documento, documentoId, archivoId, textoVolve
   onAbrirCarpeta?: () => void;
   /** Se llama tras anular en el backend (p. ej. para refrescar la lista). */
   onAnulado?: () => void;
+  /** Sin anular ni editar (p. ej. un documento de una historia académica abierto desde la búsqueda). */
+  soloConsulta?: boolean;
 }) {
   const archivo = useArchivoDocumento(archivoId);
 
@@ -166,13 +168,13 @@ export function DetalleDocumento({ documento, documentoId, archivoId, textoVolve
             </h2>
             <p className="mt-0.5 text-sm text-[#6b7a8d]">{doc.titulo}</p>
           </div>
-          <button
+          {!soloConsulta && <button
             disabled={anulado}
             onClick={() => setConfirmando(true)}
             className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Ban className="h-4 w-4" /> Anular documento
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -254,13 +256,13 @@ export function DetalleDocumento({ documento, documentoId, archivoId, textoVolve
                 >
                   <Download className="h-4 w-4" /> Descargar archivo
                 </button>
-                <button
+                {!soloConsulta && <button
                   disabled={anulado}
                   onClick={editar}
                   className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-4 text-sm font-semibold text-[#1e3a5f] hover:bg-[#f3ede1] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Pencil className="h-4 w-4" /> Editar datos
-                </button>
+                </button>}
               </>
             )}
           </div>

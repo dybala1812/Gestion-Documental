@@ -33,6 +33,8 @@ export interface LoteData {
   /** Qué cuenta el lote: archivos (por defecto) o filas (registro histórico). */
   unidad?: "archivos" | "filas";
   archivos: ArchivoLote[];
+  /** Si viene, cada pendiente se procesa de verdad (p. ej. se sube al backend) en vez de simularse. */
+  procesar?: (item: ArchivoLote) => Promise<Pick<ArchivoLote, "estado" | "detalle"> & { reintentable?: boolean }>;
 }
 
 const PASOS = [
@@ -69,9 +71,23 @@ export function LoteDetalle({ lote, onVolver }: { lote: LoteData; onVolver: () =
   const pct = total ? Math.round(((total - pendientes) / total) * 100) : 100;
   const fallidosReintentables = items.filter(i => i.estado === "Error" && i.reintentable).length;
 
-  // TODO: reemplazar por el seguimiento real del lote en el backend (subida por partes, SHA-256, auditoría).
+  // Con `procesar`, uno a la vez y de verdad; sin él, simulado.
+  // TODO: en las cargas que aún no tienen `procesar`, reemplazar por el seguimiento real del lote en el backend.
+  const enCurso = useRef(false);
   useEffect(() => {
-    if (pausado || pendientes === 0) return;
+    if (pausado || pendientes === 0 || enCurso.current) return;
+    if (lote.procesar) {
+      const item = items.find(x => x.estado === "Pendiente");
+      if (!item) return;
+      enCurso.current = true;
+      lote.procesar(item)
+        .catch((e: unknown) => ({ estado: "Error" as const, detalle: e instanceof Error ? e.message : "No se pudo cargar", reintentable: true }))
+        .then(r => {
+          enCurso.current = false;
+          setItems(prev => prev.map(x => (x.id === item.id ? { ...x, ...r } : x)));
+        });
+      return;
+    }
     const t = setTimeout(() => {
       setItems(prev => {
         const i = prev.findIndex(x => x.estado === "Pendiente");
