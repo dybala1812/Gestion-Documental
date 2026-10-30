@@ -3,16 +3,14 @@
  * @description Pasos 2 y 3 de "Nueva transferencia":
  *  - Paso 2 (`ActaExcel`): se sube el Excel que entregó la dependencia, tal cual. Queda como acta de entrega;
  *    no se lee fila por fila ni se valida.
- *  - Paso 3 física (`DatosCajas`): las cajas NO se suben; se quedan en bodega. Se llena cuántas cajas llegaron,
- *    dónde quedó guardada cada una (Bodega · Estante · Módulo del catálogo; se puede crear aquí mismo) y observaciones.
+ *  - Paso 3 física (`DatosCajas`): las cajas NO se suben; se quedan en Archivo Central. Se llena cuántas cajas llegaron,
+ *    dónde quedó guardada cada una (Carro · Estante · Bandeja, escritos en cada caja: no salen de un catálogo, D-25) y observaciones.
  *  - Paso 3 digital (`DocumentosDigitales`): cargue masivo de los documentos; se guardan con la transferencia (no pasan a Por clasificar).
  */
 import { useId, useState } from "react";
 import { toast } from "sonner";
-import { Archive, Copy, FileSpreadsheet, FileText, MapPin, Plus, Trash2, UploadCloud, X } from "lucide-react";
-import { crearCatalogo } from "../../lib/catalogosApi";
+import { Archive, Copy, FileSpreadsheet, FileText, MapPin, Trash2, UploadCloud, X } from "lucide-react";
 import { VistaPreviaArchivo } from "../comunicaciones/VisorArchivos";
-import { textoBodega, type UbicacionBodega } from "./UbicacionFisica";
 
 const campo =
   "h-10 w-full rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 text-sm text-[#2c3e50] placeholder:text-[#6b7a8d]/70 focus:border-[#e8740e] focus:outline-none focus:ring-2 focus:ring-[#e8740e]/30";
@@ -116,15 +114,21 @@ export function problemasCaja(d: DetalleCaja | undefined, anio: number): string[
   return e;
 }
 
+/** Dónde quedó guardada una caja: se escribe en cada carga, porque cada caja puede quedar en un sitio distinto. */
+export interface PosicionCaja { carro: string; estante: string; bandeja: string }
+export const POSICION_VACIA: PosicionCaja = { carro: "", estante: "", bandeja: "" };
+export const posicionCompleta = (p?: PosicionCaja) => !!(p?.carro.trim() && p.estante.trim() && p.bandeja.trim());
+/** "Carro 1 · Estante 2 · Bandeja 3" */
+export const textoPosicionCaja = (p?: PosicionCaja) =>
+  p ? [p.carro.trim() && `Carro ${p.carro.trim()}`, p.estante.trim() && `Estante ${p.estante.trim()}`, p.bandeja.trim() && `Bandeja ${p.bandeja.trim()}`].filter(Boolean).join(" · ") : "";
+
 /* ───────────────────────── Física: datos y ubicación de cada caja ───────────────────────── */
-export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbicacion, detalle, onDetalle, anio }: {
+export function UbicacionCajas({ cajas, valor, onChange, detalle, onDetalle, anio }: {
   /** Cajas: número y (si se conoce) cuántas carpetas trae. */
   cajas: { caja: string; carpetas?: number }[];
-  /** caja → id de la ubicación (texto; "" = sin asignar). */
-  valor: Record<string, string>;
-  onChange: (v: Record<string, string>) => void;
-  ubicaciones: UbicacionBodega[];
-  onNuevaUbicacion: (u: UbicacionBodega) => void;
+  /** caja → carro, estante y bandeja donde quedó guardada. */
+  valor: Record<string, PosicionCaja>;
+  onChange: (v: Record<string, PosicionCaja>) => void;
   /** caja → datos del rótulo (contenido, carpetas, fechas, folios). */
   detalle?: Record<string, DetalleCaja>;
   onDetalle?: (v: Record<string, DetalleCaja>) => void;
@@ -143,34 +147,16 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
       return [c.caja, { ...d, contenido: d.contenido || p.contenido, fechaInicial: d.fechaInicial || p.fechaInicial, fechaFinal: d.fechaFinal || p.fechaFinal }];
     })));
   };
-  const [nueva, setNueva] = useState({ bodega: "", estante: "", modulo: "" });
-  const [creando, setCreando] = useState(false);
-  const [mostrarNueva, setMostrarNueva] = useState(ubicaciones.length === 0);
-  const faltan = cajas.filter(c => !valor[c.caja]).length;
+  const [todas, setTodas] = useState<PosicionCaja>(POSICION_VACIA);
+  const faltan = cajas.filter(c => !posicionCompleta(valor[c.caja])).length;
   const conCarpetas = cajas.some(c => c.carpetas !== undefined);
-
-  const todas = (id: string) => onChange(Object.fromEntries(cajas.map(c => [c.caja, id])));
-
-  const crear = async () => {
-    if (!nueva.bodega.trim()) return toast.error("Escribe al menos la bodega");
-    setCreando(true);
-    try {
-      const u = await crearCatalogo<UbicacionBodega>("ubicaciones", {
-        bodega: nueva.bodega.trim(),
-        ...(nueva.estante.trim() ? { estante: nueva.estante.trim() } : {}),
-        ...(nueva.modulo.trim() ? { modulo: nueva.modulo.trim() } : {}),
-      });
-      onNuevaUbicacion(u);
-      // Las cajas que aún no tienen ubicación quedan en la nueva.
-      onChange(Object.fromEntries(cajas.map(c => [c.caja, valor[c.caja] || String(u.id)])));
-      setNueva({ bodega: "", estante: "", modulo: "" });
-      setMostrarNueva(false);
-      toast.success(`Ubicación creada: ${textoBodega(u)}`);
-    } catch (e) {
-      toast.error("No se pudo crear la ubicación", { description: e instanceof Error ? e.message : undefined });
-    } finally {
-      setCreando(false);
-    }
+  const setPos = (caja: string, k: keyof PosicionCaja, v: string) =>
+    onChange({ ...valor, [caja]: { ...(valor[caja] ?? POSICION_VACIA), [k]: v } });
+  /** Pone el carro, estante y bandeja escritos arriba en todas las cajas (después se puede cambiar cada una). */
+  const aplicarATodas = () => {
+    if (!posicionCompleta(todas)) return toast.error("Escribe el carro, el estante y la bandeja");
+    onChange(Object.fromEntries(cajas.map(c => [c.caja, { ...todas }])));
+    toast.success(`Todas las cajas quedan en ${textoPosicionCaja(todas)}`);
   };
 
   return (
@@ -178,7 +164,7 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
       <div className="flex items-start gap-3 rounded-xl border-2 border-[#1e3a5f] bg-white px-5 py-4">
         <Archive className="mt-0.5 h-5 w-5 shrink-0 text-[#1e3a5f]" aria-hidden />
         <p className="text-sm text-[#2c3e50]">
-          Las cajas <strong>no se suben</strong>: se quedan guardadas en físico. Registra en qué bodega, estante y módulo
+          Las cajas <strong>no se suben</strong>: se quedan guardadas en físico. Escribe en qué carro, estante y bandeja
           quedó guardada cada una ({cajas.length} caja{cajas.length === 1 ? "" : "s"})
           {conRotulo && " y lo que va en su rótulo: contenido, carpetas, fechas y folios"}.
         </p>
@@ -186,51 +172,23 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
 
       <div className={`${panel} p-5`}>
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          {ubicaciones.length > 0 ? (
-            <label className="block min-w-[16rem]">
-              <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Poner todas las cajas en</span>
-              <select className={campo} value="" onChange={e => e.target.value && todas(e.target.value)}>
-                <option value="">Elegir ubicación…</option>
-                {ubicaciones.map(u => <option key={u.id} value={u.id}>{textoBodega(u)}</option>)}
-              </select>
-            </label>
-          ) : (
-            <p className="text-sm text-[#6b7a8d]">Aún no hay ubicaciones en el catálogo: crea la primera.</p>
+          <div className="flex flex-wrap items-end gap-2">
+            {(["carro", "estante", "bandeja"] as const).map((k, i) => (
+              <label key={k} className="block w-24">
+                <span className="mb-1 block text-xs font-bold text-[#2c3e50]">{["Carro", "Estante", "Bandeja"][i]}</span>
+                <input className={campo} placeholder={`Ej. ${i + 1}`} value={todas[k]} onChange={e => setTodas(t => ({ ...t, [k]: e.target.value }))} />
+              </label>
+            ))}
+            <button type="button" className={btnSec} onClick={aplicarATodas}>
+              <MapPin className="h-4 w-4" /> Poner en todas las cajas
+            </button>
+          </div>
+          {conRotulo && cajas.length > 1 && (
+            <button type="button" className={btnSec} onClick={copiarPrimera}>
+              <Copy className="h-4 w-4" /> Copiar contenido y fechas de la caja 1
+            </button>
           )}
-          <div className="flex flex-wrap gap-2">
-            {conRotulo && cajas.length > 1 && (
-              <button type="button" className={btnSec} onClick={copiarPrimera}>
-                <Copy className="h-4 w-4" /> Copiar contenido y fechas de la caja 1
-              </button>
-            )}
-            <button type="button" className={btnSec} onClick={() => setMostrarNueva(v => !v)}>
-              <Plus className="h-4 w-4" /> Nueva ubicación
-            </button>
-          </div>
         </div>
-
-        {mostrarNueva && (
-          <div className="mb-5 grid grid-cols-1 gap-3 rounded-lg border border-[rgba(30,58,95,0.09)] bg-[#f3ede1]/50 p-4 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
-            <label className="block">
-              <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Bodega <span className="text-[#e8740e]">*</span></span>
-              <input className={campo} placeholder="Ej. Bodega 1" value={nueva.bodega} onChange={e => setNueva(n => ({ ...n, bodega: e.target.value }))} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Estante</span>
-              <input className={campo} placeholder="Ej. 4" value={nueva.estante} onChange={e => setNueva(n => ({ ...n, estante: e.target.value }))} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Módulo</span>
-              <input className={campo} placeholder="Ej. 2" value={nueva.modulo} onChange={e => setNueva(n => ({ ...n, modulo: e.target.value }))} />
-            </label>
-            <button
-              type="button" onClick={crear} disabled={creando}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-            >
-              <Plus className="h-4 w-4" /> {creando ? "Creando…" : "Crear"}
-            </button>
-          </div>
-        )}
 
         <div className="overflow-x-auto">
           <table className={`w-full text-sm ${conRotulo ? "min-w-[64rem]" : "min-w-[32rem]"}`}>
@@ -247,7 +205,9 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
                     <th className="px-3 py-2.5">Folios</th>
                   </>
                 )}
-                <th className="px-3 py-2.5">Dónde quedó guardada <span className="text-[#e8740e]">*</span></th>
+                <th className="px-3 py-2.5">Carro <span className="text-[#e8740e]">*</span></th>
+                <th className="px-3 py-2.5">Estante <span className="text-[#e8740e]">*</span></th>
+                <th className="px-3 py-2.5">Bandeja <span className="text-[#e8740e]">*</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(30,58,95,0.09)]">
@@ -255,7 +215,7 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
                 const d = detalle?.[c.caja] ?? DETALLE_CAJA_VACIO;
                 const problemas = conRotulo ? problemasCaja(detalle?.[c.caja], anio ?? 0) : [];
                 return (
-                <tr key={c.caja} className={valor[c.caja] && problemas.length === 0 ? "" : "bg-amber-50/60"} title={problemas.join(" · ") || undefined}>
+                <tr key={c.caja} className={posicionCompleta(valor[c.caja]) && problemas.length === 0 ? "" : "bg-amber-50/60"} title={problemas.join(" · ") || undefined}>
                   <td className="whitespace-nowrap px-3 py-2 font-bold text-[#1e3a5f]">Caja {c.caja}</td>
                   {conCarpetas && !conRotulo && <td className="px-3 py-2 text-[#2c3e50]">{c.carpetas ?? "—"}</td>}
                   {conRotulo && (
@@ -282,16 +242,12 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
                       </td>
                     </>
                   )}
-                  <td className="min-w-[14rem] px-2 py-2">
-                    <select
-                      aria-label={`Ubicación de la caja ${c.caja}`}
-                      className={campo} value={valor[c.caja] ?? ""}
-                      onChange={e => onChange({ ...valor, [c.caja]: e.target.value })}
-                    >
-                      <option value="">Sin asignar</option>
-                      {ubicaciones.map(u => <option key={u.id} value={u.id}>{textoBodega(u)}</option>)}
-                    </select>
-                  </td>
+                  {(["carro", "estante", "bandeja"] as const).map((k, i) => (
+                    <td key={k} className="w-24 px-2 py-2">
+                      <input aria-label={`${["Carro", "Estante", "Bandeja"][i]} de la caja ${c.caja}`} className={campo}
+                        placeholder={`Ej. ${i + 1}`} value={valor[c.caja]?.[k] ?? ""} onChange={e => setPos(c.caja, k, e.target.value)} />
+                    </td>
+                  ))}
                 </tr>
                 );
               })}
@@ -300,7 +256,7 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
         </div>
         <p className={`mt-3 flex items-center gap-1.5 text-xs ${faltan ? "text-amber-700" : "text-emerald-700"}`}>
           <MapPin className="h-3.5 w-3.5" />
-          {faltan ? `Falta la ubicación de ${faltan} caja${faltan === 1 ? "" : "s"}.` : "Todas las cajas tienen ubicación."}
+          {faltan ? `Falta el carro, estante o bandeja de ${faltan} caja${faltan === 1 ? "" : "s"}.` : "Todas las cajas tienen carro, estante y bandeja."}
         </p>
         {conRotulo && cajas.some(c => problemasCaja(detalle?.[c.caja], anio ?? 0).length > 0) && (
           <p className="mt-1 text-xs text-amber-700">

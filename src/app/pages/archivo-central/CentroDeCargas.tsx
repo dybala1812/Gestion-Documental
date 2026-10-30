@@ -28,6 +28,9 @@ interface Carga {
   icono: React.ElementType;
 }
 
+/** Ocultas por ahora (pedido del usuario, 30/10/2026): A · Documento individual y E · Registro histórico. */
+const OCULTAS: string[] = ["A", "E"];
+
 const CARGAS: Carga[] = [
   { id: "A", titulo: "Documento individual", descripcion: "Un PDF o imagen con sus datos. Si faltan datos, queda por clasificar.", quien: "Archivo Central", icono: FileInput },
   { id: "B", titulo: "Transferencia física", descripcion: "Solo el acta o FUID de la dependencia. Las cajas no se escanean.", quien: "Archivo Central o la dependencia", icono: Archive },
@@ -215,7 +218,7 @@ export function CentroDeCargas({ onIrATransferencias }: CentroDeCargasProps) {
 
       {/* ── Tipos de carga ──────────────────────────────────────────────── */}
       <section aria-label="Tipos de carga" className="flex flex-wrap gap-1 lg:flex-nowrap">
-        {CARGAS.map(c => <CargaCard key={c.id} carga={c} onSeleccionar={abrirCarga} />)}
+        {CARGAS.filter(c => !OCULTAS.includes(c.id)).map(c => <CargaCard key={c.id} carga={c} onSeleccionar={abrirCarga} />)}
       </section>
 
       {/* ── Proceso común ───────────────────────────────────────────────── */}

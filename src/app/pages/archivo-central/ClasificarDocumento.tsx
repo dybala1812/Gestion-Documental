@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { apiClasificarDocumento, apiListAsuntos, type AsuntoCat } from "../../lib/documentosApi";
 import { VisorDocumento, guardarArchivoDescargado, useArchivoDocumento } from "./VisorDocumento";
-import { UBICACION_VACIA, UbicacionCampos, useUbicacionesActivas, type ValorUbicacion } from "./UbicacionFisica";
+import { UbicacionCampos, type ValorUbicacion } from "./UbicacionFisica";
 import { AlertCircle, ArrowLeft, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, Loader2, ScanText } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -30,7 +30,8 @@ export interface DocumentoPendiente {
   /** Lo que ya se escribió al cargarlo (se muestra para completar). */
   previo?: {
     tipo?: string | null; consecutivo?: string | null; fecha?: string | null;
-    caja?: string | null; carpeta?: string | null; ubicacionId?: number | null;
+    carro?: string | null; estante?: string | null; bandeja?: string | null;
+    caja?: string | null; carpeta?: string | null;
   };
 }
 
@@ -55,7 +56,7 @@ const datosIniciales = (d: DocumentoPendiente): Datos => {
     consecutivo: (p.consecutivo ?? "").replace(/\/\d{4}$/, ""),
     dia: dia ? String(Number(dia)) : "", mes: mes ? MESES[Number(mes) - 1] ?? "" : "", anio: String(d.anio),
     asunto: "", remitente: "", recibio: "",
-    ubicacion: { ...UBICACION_VACIA, caja: p.caja ?? "", carpeta: p.carpeta ?? "", ubicacion_id: p.ubicacionId ? String(p.ubicacionId) : "" },
+    ubicacion: { carro: p.carro ?? "", estante: p.estante ?? "", bandeja: p.bandeja ?? "", caja: p.caja ?? "", carpeta: p.carpeta ?? "" },
   };
 };
 
@@ -108,7 +109,6 @@ export function ClasificarDocumento({ documentos, indiceInicial, onClasificado, 
   const [indice, setIndice] = useState(indiceInicial);
   const [borradores, setBorradores] = useState<Record<string, Datos>>({});
   const [guardando, setGuardando] = useState(false);
-  const ubicaciones = useUbicacionesActivas();
   const [asuntos, setAsuntos] = useState<AsuntoCat[] | null>(null);
   /** Ventana "Te falta…": lo que hay que completar para clasificar (null = cerrada). */
   const [ventana, setVentana] = useState<string[] | null>(null);
@@ -168,9 +168,11 @@ export function ClasificarDocumento({ documentos, indiceInicial, onClasificado, 
     asunto_id: datos.asunto ? Number(datos.asunto) : null,
     remitente: datos.remitente.trim(),
     destinatario: datos.recibio.trim(),
+    carro: datos.ubicacion.carro.trim(),
+    estante: datos.ubicacion.estante.trim(),
+    bandeja: datos.ubicacion.bandeja.trim(),
     caja: datos.ubicacion.caja.trim(),
     carpeta: datos.ubicacion.carpeta.trim(),
-    ubicacion_id: datos.ubicacion.ubicacion_id ? Number(datos.ubicacion.ubicacion_id) : null,
   }, clasificar);
 
   /** El documento salió de Por clasificar: se quita de la lista y se pasa al siguiente. */
@@ -315,10 +317,9 @@ export function ClasificarDocumento({ documentos, indiceInicial, onClasificado, 
                 <input className={campo} placeholder="Funcionario" value={datos.recibio} onChange={set("recibio")} />
               </Campo>
               <UbicacionCampos
-                requerido
+                requeridos={["caja", "carpeta"]}
                 valor={datos.ubicacion}
                 onChange={ubicacion => setBorradores(b => ({ ...b, [doc.id]: { ...datos, ubicacion } }))}
-                ubicaciones={ubicaciones}
               />
             </div>
           </section>

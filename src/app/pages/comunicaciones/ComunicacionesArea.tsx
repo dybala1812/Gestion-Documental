@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { sileo } from "sileo";
 import { formatApiError } from "../../lib/api";
-import { AlertTriangle, CalendarDays, Inbox, Loader2, Mail, MailQuestion, RefreshCw, Send } from "lucide-react";
+import { AlertTriangle, Inbox, Loader2, Mail, MailQuestion, RefreshCw, Send } from "lucide-react";
 import {
   type Comunicacion, type CorreoSinAsociar, type DependenciaCom,
   apiListComunicaciones, apiListCorreosSinAsociar, apiListDependenciasCom, estaVencida,
@@ -180,7 +180,7 @@ export function ComunicacionesArea({
           {([
             { key: "bandeja", label: "Bandeja", corto: "Bandeja", icon: Inbox, badge: 0 },
             { key: "sinAsociar", label: "Correos sin asociar", corto: "Sin asociar", icon: MailQuestion, badge: correos.length },
-            { key: "historico", label: "Registro histórico", corto: "Histórico", icon: CalendarDays, badge: 0 },
+            // Registro histórico: oculto por ahora (pedido del usuario, 30/10/2026).
           ] as const).map(({ key, label, corto, icon: Icon, badge }) => (
             <button
               key={key}

@@ -28,12 +28,17 @@ const verFecha = (iso: string) => {
   return a ? `${d} ${MESES[m - 1]} ${a}` : "—";
 };
 
-export function Transferencias({ tipoInicial }: { tipoInicial?: TipoEntrega }) {
+export function Transferencias({ tipoInicial, abrirId, onAbierta }: {
+  tipoInicial?: TipoEntrega;
+  /** Abre directo el detalle de esta transferencia (desde Consulta › Buscar o el Archivo). */
+  abrirId?: number;
+  onAbierta?: () => void;
+}) {
   // Si llega un tipo (desde Centro de cargas), abre directo el asistente.
   const [nueva, setNueva] = useState(!!tipoInicial);
   const [tipo, setTipo] = useState<TipoEntrega>(tipoInicial ?? "fisica");
 
-  const [detalleId, setDetalleId] = useState<number | null>(null);
+  const [detalleId, setDetalleId] = useState<number | null>(abrirId ?? null);
   const [lista, setLista] = useState<TransferenciaApi[]>([]);
   const [resumen, setResumen] = useState<ResumenTransferencias | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -56,7 +61,7 @@ export function Transferencias({ tipoInicial }: { tipoInicial?: TipoEntrega }) {
   // Carga al entrar y cada vez que se vuelve de "Nueva transferencia" (para ver la recién creada).
   useEffect(() => { if (!nueva && detalleId === null) cargar(); }, [nueva, detalleId, cargar]);
 
-  if (detalleId !== null) return <DetalleTransferencia id={detalleId} onVolver={() => setDetalleId(null)} />;
+  if (detalleId !== null) return <DetalleTransferencia id={detalleId} onVolver={() => { setDetalleId(null); onAbierta?.(); }} />;
   if (nueva) return <NuevaTransferencia tipoInicial={tipo} onVolver={() => setNueva(false)} />;
 
   const th = "px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-white whitespace-nowrap";

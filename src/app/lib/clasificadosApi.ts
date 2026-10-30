@@ -8,12 +8,14 @@ import { sgdFetch } from "./sgdApi";
 
 export type TipoClasificado = "Entrada" | "Salida" | "Interno";
 
-/** Registro del catálogo de ubicaciones físicas (opcional, P-08). */
+/** Posición del catálogo de ubicaciones físicas: Carro · Estante · Bandeja (D-23). Bodega y módulo: registros viejos. */
 export interface UbicacionBodega {
   id: number;
-  bodega: string;
+  carro?: string | null;
   estante: string | null;
-  modulo: string | null;
+  bandeja?: string | null;
+  bodega?: string | null;
+  modulo?: string | null;
 }
 
 export interface Clasificado {
@@ -31,9 +33,13 @@ export interface Clasificado {
   dependencia_id: number | null;
   asunto: string | null;
   trd: string | null;
+  /** Ubicación física: Carro → Estante → Bandeja → Caja → Carpeta (D-23). */
+  carro?: string | null;
+  estante?: string | null;
+  bandeja?: string | null;
   caja: string | null;
   carpeta: string | null;
-  /** Bodega · estante · módulo del catálogo, si el documento la tiene. */
+  /** Posición del catálogo, si el documento la tiene. */
   ubicacion?: UbicacionBodega | null;
   origen: string | null;
   estado: string;

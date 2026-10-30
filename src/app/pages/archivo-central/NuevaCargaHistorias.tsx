@@ -5,16 +5,21 @@
  * El nombre del archivo debe seguir la convención "APELLIDOS NOMBRES - cédula.pdf" (por acordar).
  * Calcula la huella SHA-256 en el navegador; la detección de duplicados contra el archivo existente la hace el backend (TODO).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { alertaCarga, plural } from "../../lib/alertasCarga";
+import { listarCatalogo } from "../../lib/catalogosApi";
+import { apiCargarHistoria, type EstadoHistoria } from "../../lib/historiasApi";
 import { ArrowLeft, ArrowRight, Check, FileText, FolderUp, GraduationCap, Info, Loader2, UploadCloud, Wand2, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { tamanoLegible, type ArchivoLote, type LoteData } from "./LoteDetalle";
 
 /* ───────────────────────── Catálogos de ejemplo (luego, de la API) ───────────────────────── */
 const ESTADOS = ["Graduados", "Retirados", "Activos"];
-const NIVELES = ["Pregrado", "Posgrado"];
-const PROGRAMAS = ["Ingeniería de Sistemas", "Derecho", "Psicología", "Contaduría Pública", "Administración de Empresas"];
+const ESTADO_DB: Record<string, EstadoHistoria> = { Graduados: "graduado", Retirados: "retirado", Activos: "activa" };
+
+/** Programa del catálogo (Catálogos › Programas académicos); su nivel sale de Catálogos › Niveles. */
+interface NivelRef { id: number; nombre: string; tipo: string }
+interface ProgramaCat { id: number; nombre: string; nivel_id?: number | null; nivel_ref?: NivelRef | null }
 const ANIO_ACTUAL = new Date().getFullYear();
 const ANIOS = Array.from({ length: ANIO_ACTUAL - 1989 }, (_, i) => ANIO_ACTUAL - i);
 const MAX_MB = 50;
@@ -35,9 +40,15 @@ const SUBTITULO = [
   "confirma y se crea el lote.",
 ];
 
-interface Datos { estado: string; anio: string; nivel: string; programa: string }
+/** nivel = id del nivel (Catálogos › Niveles); programa = id del programa. */
+interface Datos { estado: string; anio: string; nivel: string; programa: string; titulo: string }
 type Nivel = "verde" | "amarillo" | "rojo";
-interface Resultado { archivo: File; huella: string; nivel: Nivel; mensaje: string; estudiante: string }
+interface Resultado {
+  archivo: File; huella: string; nivel: Nivel; mensaje: string; estudiante: string;
+  apellidos: string; nombres: string; cedula: string;
+  /** Título del documento para buscarlo (p. ej. "Acta de grado"); se puede cambiar por archivo. */
+  titulo: string;
+}
 
 /* ───────────────────────── Utilidades ───────────────────────── */
 async function sha256(archivo: File): Promise<string> {
@@ -45,19 +56,22 @@ async function sha256(archivo: File): Promise<string> {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** "GÓMEZ RIASCOS ANA LUCÍA - 1061998877.pdf" → { nombre, cedula } o null si no cumple la convención. */
+/** "GÓMEZ RIASCOS ANA LUCÍA - 1061998877.pdf" → { nombre, apellidos, nombres, cedula } o null si no cumple la convención.
+ *  Apellidos: las dos primeras palabras (una si el nombre solo tiene dos); nombres: el resto. */
 function leerNombre(nombreArchivo: string) {
   const m = nombreArchivo.match(CONVENCION);
   if (!m || !/^[\p{L}'. ]+$/u.test(m[1]) || m[1].trim().split(/\s+/).length < 2) return null;
-  return { nombre: m[1].trim(), cedula: m[2] };
+  const palabras = m[1].trim().split(/\s+/);
+  const corte = palabras.length >= 3 ? 2 : 1;
+  return { nombre: m[1].trim(), apellidos: palabras.slice(0, corte).join(" "), nombres: palabras.slice(corte).join(" "), cedula: m[2] };
 }
 
-async function evaluar(archivos: File[]): Promise<Resultado[]> {
+async function evaluar(archivos: File[], titulo: string): Promise<Resultado[]> {
   const vistas = new Map<string, string>(); // huella → primer archivo con esa huella
   const out: Resultado[] = [];
   const ordenados = [...archivos].sort((a, b) => a.name.localeCompare(b.name, "es"));
   for (const archivo of ordenados) {
-    const base = { archivo, huella: "", estudiante: "—" };
+    const base = { archivo, huella: "", estudiante: "—", apellidos: "", nombres: "", cedula: "", titulo };
     if (!EXT_OK.test(archivo.name)) { out.push({ ...base, nivel: "rojo", mensaje: "Formato no permitido. Usa PDF, JPG, PNG o TIFF." }); continue; }
     if (archivo.size === 0) { out.push({ ...base, nivel: "rojo", mensaje: "El archivo está vacío o dañado." }); continue; }
     if (archivo.size > MAX_MB * 1024 * 1024) { out.push({ ...base, nivel: "rojo", mensaje: `Supera el tamaño máximo de ${MAX_MB} MB.` }); continue; }
@@ -65,14 +79,15 @@ async function evaluar(archivos: File[]): Promise<Resultado[]> {
     const est = leerNombre(archivo.name);
     if (!est) { out.push({ ...base, huella, nivel: "rojo", mensaje: "El nombre no sigue la convención APELLIDOS NOMBRES - cédula.pdf" }); continue; }
     const estudiante = `${est.nombre} · C.C. ${est.cedula}`;
+    const persona = { estudiante, apellidos: est.apellidos, nombres: est.nombres, cedula: est.cedula, titulo };
     const previo = vistas.get(huella);
     if (previo) {
-      out.push({ archivo, huella, estudiante, nivel: "amarillo", mensaje: `Duplicado: misma huella que ${previo}. No se guarda otra vez.` });
+      out.push({ archivo, huella, ...persona, nivel: "amarillo", mensaje: `Duplicado: misma huella que ${previo}. No se guarda otra vez.` });
       continue;
     }
     vistas.set(huella, archivo.name);
-    // TODO: el backend también compara la huella contra el archivo ya existente ("ya está en el archivo").
-    out.push({ archivo, huella, estudiante, nivel: "verde", mensaje: "Listo para cargar." });
+    // El backend también compara la huella con lo que ya tiene la historia (409 = ya estaba).
+    out.push({ archivo, huella, ...persona, nivel: "verde", mensaje: "Listo para cargar." });
   }
   return out;
 }
@@ -118,14 +133,29 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
   const usuarioNombre = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ") || "Usuario";
 
   const [paso, setPaso] = useState(1);
-  const [datos, setDatos] = useState<Datos>({ estado: "", anio: String(ANIO_ACTUAL), nivel: "", programa: "" });
+  const [datos, setDatos] = useState<Datos>({ estado: "", anio: String(ANIO_ACTUAL), nivel: "", programa: "", titulo: "" });
   const [archivos, setArchivos] = useState<File[]>([]);
   const [resultados, setResultados] = useState<Resultado[]>([]);
   const [arrastrando, setArrastrando] = useState(false);
   const [validando, setValidando] = useState(false);
+  const [programas, setProgramas] = useState<ProgramaCat[] | null>(null);
 
-  const set = (k: keyof Datos) => (e: React.ChangeEvent<HTMLSelectElement>) => setDatos(d => ({ ...d, [k]: e.target.value }));
-  const destino = `${datos.estado} / ${datos.anio} / ${datos.nivel} / ${datos.programa}`;
+  // Programas activos del catálogo; Pregrado y Posgrado muestran los suyos.
+  useEffect(() => {
+    listarCatalogo<ProgramaCat>("programas", { estado: "activo", limite: 500 })
+      .then(r => setProgramas(r.datos ?? []))
+      .catch(() => setProgramas([]));
+  }, []);
+  // Niveles: los de Catálogos › Niveles que tienen programas activos (Pregrado, Técnico, Posgrado).
+  const ORDEN_TIPO: Record<string, number> = { pregrado: 1, tecnico: 2, posgrado: 3 };
+  const niveles = [...new Map((programas ?? []).filter(p => p.nivel_ref).map(p => [p.nivel_ref!.id, p.nivel_ref!])).values()]
+    .sort((a, b) => (ORDEN_TIPO[a.tipo] ?? 9) - (ORDEN_TIPO[b.tipo] ?? 9) || a.nombre.localeCompare(b.nombre, "es"));
+  const nivelSel = niveles.find(n => String(n.id) === datos.nivel);
+  const delNivel = (nivel: string) => (programas ?? []).filter(p => String(p.nivel_id ?? "") === nivel);
+  const programaSel = (programas ?? []).find(p => String(p.id) === datos.programa);
+
+  const set = (k: keyof Datos) => (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => setDatos(d => ({ ...d, [k]: e.target.value }));
+  const destino = `${datos.estado} / ${datos.anio} / ${nivelSel?.nombre ?? ""} / ${programaSel?.nombre ?? ""}`;
   const cuenta = (n: Nivel) => resultados.filter(r => r.nivel === n).length;
   const totalBytes = archivos.reduce((s, f) => s + f.size, 0);
 
@@ -143,7 +173,7 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
     setValidando(true);
     alertaCarga.procesando(`Validando ${plural(archivos.length, "archivo", "archivos")}…`, "Se calcula la huella SHA-256 de cada uno.");
     try {
-      const evaluados = await evaluar(archivos);
+      const evaluados = await evaluar(archivos, datos.titulo.trim());
       setResultados(evaluados);
       setPaso(3);
       const ok = evaluados.filter(r => r.nivel === "verde").length;
@@ -160,7 +190,7 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
   };
 
   const iniciar = () => {
-    // TODO: crear el lote en el backend (código, subida por partes, auditoría). El código aquí es de ejemplo.
+    // Cada archivo "Listo" se sube al backend (POST /api/historias); duplicados y errores ya vienen resueltos.
     const items: ArchivoLote[] = resultados.map((r, i) => ({
       id: `${i}-${r.archivo.name}`,
       nombre: r.archivo.name,
@@ -170,6 +200,27 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
       estado: r.nivel === "verde" ? "Pendiente" : r.nivel === "amarillo" ? "Duplicado" : "Error",
       detalle: r.nivel === "verde" ? "" : r.mensaje,
     }));
+    const porId = new Map(items.map((it, i) => [it.id, resultados[i]] as const));
+    const procesar = async (it: ArchivoLote) => {
+      const r = porId.get(it.id)!;
+      const titulo = r.titulo.trim() || datos.titulo.trim();
+      try {
+        const h = await apiCargarHistoria(r.archivo, {
+          programa_id: Number(datos.programa), estado: ESTADO_DB[datos.estado], anio: Number(datos.anio),
+          titulo, apellidos: r.apellidos, nombres: r.nombres, numero_documento: r.cedula,
+        });
+        const quien = `${h.estudiante.apellidos} ${h.estudiante.nombres}`;
+        return {
+          estado: "Aceptado" as const,
+          detalle: `«${titulo}» ${h.nueva_historia ? "abrió la historia de" : "se agregó a la historia de"} ${quien}.`
+            + (h.estudiante.nombre_distinto ? " Ese estudiante ya estaba registrado con ese nombre." : ""),
+        };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "No se pudo cargar";
+        if (/duplicad|ya est/i.test(msg)) return { estado: "Duplicado" as const, detalle: "Ya estaba en la historia del estudiante. No se guarda otra vez." };
+        return { estado: "Error" as const, detalle: msg, reintentable: true };
+      }
+    };
     alertaCarga.info("Lote iniciado", `Historias académicas masivas · ${plural(items.length, "archivo", "archivos")}.`);
     onIniciar({
       codigo: `L-${ANIO_ACTUAL}-044`,
@@ -178,11 +229,12 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
       usuario: usuarioNombre,
       fecha: new Date().toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" }).replace(/\./g, ""),
       archivos: items,
+      procesar,
     });
   };
 
   const puedeContinuar =
-    (paso === 1 && !!datos.estado && !!datos.anio && !!datos.nivel && !!datos.programa) ||
+    (paso === 1 && !!datos.estado && !!datos.anio && !!datos.nivel && !!datos.programa && !!datos.titulo.trim()) ||
     (paso === 3 && cuenta("verde") > 0);
 
   return (
@@ -236,15 +288,24 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
               <select className={campo} value={datos.anio} onChange={set("anio")}>{ANIOS.map(x => <option key={x}>{x}</option>)}</select>
             </Campo>
             <Campo label="Nivel">
-              <select className={campo} value={datos.nivel} onChange={set("nivel")}>
-                <option value="">Selecciona…</option>{NIVELES.map(x => <option key={x}>{x}</option>)}
+              <select className={campo} value={datos.nivel} onChange={e => setDatos(d => ({ ...d, nivel: e.target.value, programa: "" }))}>
+                <option value="">{programas === null ? "Cargando…" : niveles.length === 0 ? "Sin programas en el catálogo" : "Selecciona…"}</option>
+                {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
               </select>
             </Campo>
-            <Campo label="Programa">
-              <select className={campo} value={datos.programa} onChange={set("programa")}>
-                <option value="">Selecciona…</option>{PROGRAMAS.map(x => <option key={x}>{x}</option>)}
+            <Campo label={nivelSel?.tipo === "posgrado" ? "Especialización / programa de posgrado" : "Programa"}>
+              <select className={campo} value={datos.programa} onChange={set("programa")} disabled={!datos.nivel}>
+                <option value="">{!datos.nivel ? "Primero elige el nivel" : "Selecciona…"}</option>
+                {delNivel(datos.nivel).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </Campo>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Título del documento <span className="text-[#e8740e]">*</span></span>
+              <input className={campo} placeholder="Ej. Acta de grado, Certificado de notas" value={datos.titulo} onChange={set("titulo")} />
+              <span className="mt-1 block text-xs text-[#6b7a8d]">Se usa para encontrarlo en Consulta › Buscar. Se puede cambiar por archivo en la vista previa.</span>
+            </label>
           </div>
           <p className="flex items-start gap-2 rounded-xl border-2 border-[#1e3a5f] bg-[#eef2f7] px-4 py-3 text-sm text-[#2c3e50]">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#1e3a5f]" />
@@ -333,7 +394,7 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
             <table className="w-full min-w-[900px] border-collapse">
               <thead>
                 <tr className="border-b-[3px] border-[#e8740e] bg-[#1e3a5f]">
-                  {["#", "Archivo", "Tamaño", "Huella SHA-256", "Resultado", "Estudiante propuesto"].map(h => (
+                  {["#", "Archivo", "Tamaño", "Huella SHA-256", "Resultado", "Estudiante propuesto", "Título"].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-white">{h}</th>
                   ))}
                 </tr>
@@ -352,6 +413,16 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
                       </span>
                     </td>
                     <td className="px-3 py-2 text-xs text-[#2c3e50]">{r.nivel === "rojo" ? <span className="text-red-700">{r.mensaje}</span> : r.nivel === "amarillo" ? <span className="text-amber-700">{r.mensaje}</span> : r.estudiante}</td>
+                    <td className="px-3 py-2">
+                      {r.nivel === "verde" ? (
+                        <input
+                          aria-label={`Título de ${r.archivo.name}`}
+                          className="h-8 w-48 rounded-md border border-[rgba(30,58,95,0.15)] bg-white px-2 text-xs text-[#2c3e50] focus:border-[#e8740e] focus:outline-none focus:ring-2 focus:ring-[#e8740e]/30"
+                          value={r.titulo}
+                          onChange={e => setResultados(rs => rs.map((x, j) => (j === i ? { ...x, titulo: e.target.value } : x)))}
+                        />
+                      ) : <span className="text-xs text-[#6b7a8d]">—</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

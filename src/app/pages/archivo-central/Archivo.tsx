@@ -5,9 +5,11 @@
  * nodo (RF-AC-013). Árbol a la izquierda y documentos de la carpeta a la derecha, 20 por página.
  * Los datos vienen del backend (GET /api/archivo/arbol y /api/archivo/buscar), que limita a un
  * usuario de Dependencia a sus carpetas. Al abrir un documento se ve en el visor con su ficha.
+ * Cada dependencia y año muestra también sus transferencias (física o digital); al elegir una se
+ * abre en Ingreso › Transferencias.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, FileText, Folder, FolderOpen, Loader2, RefreshCw, Search, Upload, Archive as ArchiveIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, Folder, FolderOpen, Loader2, RefreshCw, Search, Truck, Upload, Archive as ArchiveIcon } from "lucide-react";
 import { DetalleDocumento, type DocumentoDetalle } from "./DetalleDocumento";
 import { formatApiError } from "../../lib/api";
 import {
@@ -47,6 +49,9 @@ function detalleDe(x: ResultadoBusqueda): DocumentoDetalle {
     trd: x.trd ?? "—",
     contraparte: x.contraparte ?? "—",
     persona: "—",
+    carro: x.carro ?? "",
+    estante: x.estante ?? "",
+    bandeja: x.bandeja ?? "",
     caja: x.caja ?? "—",
     carpeta: x.carpeta ?? "—",
     ubicacion: x.ubicacion ?? null,
@@ -109,7 +114,11 @@ function Fila({ nivel, etiqueta, cuenta, abierto, expandible, seleccionado, onTo
 }
 
 /* ───────────────────────── Componente ───────────────────────── */
-export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
+export function Archivo({ onCargarLote, onAbrirTransferencia }: {
+  onCargarLote?: () => void;
+  /** Abre una transferencia en Ingreso › Transferencias. */
+  onAbrirTransferencia?: (id: number) => void;
+}) {
   const [arbol, setArbol] = useState<NodoDependencia[] | null>(null);
   const [errorArbol, setErrorArbol] = useState("");
   const [sel, setSel] = useState<Seleccion>({});
@@ -121,6 +130,8 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
   const [cargandoDocs, setCargandoDocs] = useState(false);
   const [errorDocs, setErrorDocs] = useState("");
   const [recarga, setRecarga] = useState(0);
+  /** Transferencias de la dependencia (y año) elegidos. */
+  const [transferencias, setTransferencias] = useState<ResultadoBusqueda[] | null>(null);
   /** Documento abierto (detalle); null = se ve el repositorio. */
   const [abierto, setAbierto] = useState<ResultadoBusqueda | null>(null);
 
@@ -160,6 +171,16 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
   }, [sel.depId, sel.anio, sel.asuntoId, texto, pagina]);
 
   useEffect(() => { cargarDocumentos(); }, [cargarDocumentos, recarga]);
+
+  // Transferencias de la carpeta: solo con una dependencia elegida (y sin asunto: no tienen asunto).
+  useEffect(() => {
+    if (!sel.depId || sel.asuntoId) { setTransferencias(null); return; }
+    let vigente = true;
+    apiBuscarArchivo({ alcance: "transferencias", dependencia_id: sel.depId, anio: sel.anio }, 1, 50)
+      .then(r => { if (vigente) setTransferencias(r.filas); })
+      .catch(() => { if (vigente) setTransferencias([]); });
+    return () => { vigente = false; };
+  }, [sel.depId, sel.anio, sel.asuntoId, recarga]);
 
   const elegir = (s: Seleccion) => { setSel(s); setPagina(1); };
 
@@ -259,7 +280,8 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
               return (
                 <div key={claveDep}>
                   <Fila
-                    nivel={0} etiqueta={dep.nombre} cuenta={dep.total} abierto={abiertoDep} expandible={dep.total > 0}
+                    nivel={0} etiqueta={dep.transferencias ? `${dep.nombre} · ${dep.transferencias} transf.` : dep.nombre}
+                    cuenta={dep.total} abierto={abiertoDep} expandible={dep.total > 0 || (dep.transferencias ?? 0) > 0}
                     seleccionado={sel.depId === dep.dependencia_id && sel.anio === undefined}
                     onToggle={() => alternar(claveDep)}
                     onSelect={() => elegir({ depId: dep.dependencia_id })}
@@ -270,7 +292,7 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
                     return (
                       <div key={claveAnio}>
                         <Fila
-                          nivel={1} etiqueta={String(y.anio)}
+                          nivel={1} etiqueta={y.transferencias ? `${y.anio} · ${y.transferencias} transf.` : String(y.anio)}
                           cuenta={y.total}
                           abierto={abiertoAnio} expandible
                           seleccionado={sel.depId === dep.dependencia_id && sel.anio === y.anio && !sel.asuntoId}
@@ -299,6 +321,26 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
 
         {/* ── Documentos de la carpeta ──────────────────────────────────── */}
         <section aria-label="Documentos de la carpeta" className="min-w-0 space-y-4">
+          {transferencias && transferencias.length > 0 && (
+            <div className="overflow-hidden rounded-xl border border-[rgba(30,58,95,0.09)] bg-white shadow-sm">
+              <p className="flex items-center gap-2 bg-[#f3ede1]/60 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6b7a8d]">
+                <Truck className="h-4 w-4 text-[#c89b14]" /> Transferencias ({transferencias.length})
+              </p>
+              <ul>
+                {transferencias.map(t => (
+                  <li key={t.id}>
+                    <button type="button" onClick={() => onAbrirTransferencia?.(t.id)}
+                      className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-t border-[rgba(30,58,95,0.09)] px-4 py-3 text-left hover:bg-[#f3ede1]/40">
+                      <span className="font-mono text-xs font-bold text-[#1e3a5f]">{t.consecutivo}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm text-[#2c3e50]">{t.titulo}</span>
+                      <span className="text-xs text-[#6b7a8d]">{t.anio}{t.contraparte ? ` · entregó ${t.contraparte}` : ""}</span>
+                      <span className="rounded-full border border-[rgba(30,58,95,0.15)] px-2 py-0.5 text-[11px] font-semibold text-[#1e3a5f]">{t.estado}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <nav aria-label="Ruta de la carpeta" className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm">
               <FolderOpen className="h-5 w-5 shrink-0 text-[#e8740e]" />

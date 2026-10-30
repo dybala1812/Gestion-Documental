@@ -31,6 +31,9 @@ interface Notificacion {
   destino: DestinoInicio;
 }
 
+// Por clasificar está oculto por ahora: sus avisos no se muestran.
+const VISIBLES_DESTINO: DestinoInicio[] = ["centro-cargas", "transferencias"];
+
 const NOTIFICACIONES: Notificacion[] = [
   { id: "n1", tipo: "clasificar", texto: "TR-2025-002 · Mercadeo (2023) tiene 5 documentos sin asunto, año ni ubicación", detalle: "Recibida el 18 feb 2025", destino: "por-clasificar" },
   { id: "n2", tipo: "clasificar", texto: "TR-2025-003 · Secretaría General (2023) tiene 3 documentos sin asunto, año ni ubicación", detalle: "Recibida el 25 feb 2025", destino: "por-clasificar" },
@@ -40,6 +43,7 @@ const NOTIFICACIONES: Notificacion[] = [
     detalle: `Plazo: 31 mar ${ANIO_ACTUAL} · vencido`,
   })),
 ];
+const VISIBLES = NOTIFICACIONES.filter(n => VISIBLES_DESTINO.includes(n.destino));
 
 const TOTAL_DEPENDENCIAS = 8;
 const PENDIENTES = ["Dirección Administrativa", "Gestión Documental", "Talento Humano", "Financiera"];
@@ -54,7 +58,7 @@ const panel = "rounded-xl border border-[rgba(30,58,95,0.09)] bg-white shadow-sm
 /* ───────────────────────── Componente ───────────────────────── */
 export function Inicio({ onIrA }: { onIrA: (destino: DestinoInicio) => void }) {
   const [leidas, setLeidas] = useState<Set<string>>(new Set());
-  const nuevas = NOTIFICACIONES.filter(n => !leidas.has(n.id)).length;
+  const nuevas = VISIBLES.filter(n => !leidas.has(n.id)).length;
   const porcentajePendiente = Math.round((PENDIENTES.length / TOTAL_DEPENDENCIAS) * 100);
 
   const abrir = (n: Notificacion) => {
@@ -108,7 +112,7 @@ export function Inicio({ onIrA }: { onIrA: (destino: DestinoInicio) => void }) {
             </h3>
             <button
               disabled={nuevas === 0}
-              onClick={() => setLeidas(new Set(NOTIFICACIONES.map(n => n.id)))}
+              onClick={() => setLeidas(new Set(VISIBLES.map(n => n.id)))}
               className="rounded-lg border border-[rgba(30,58,95,0.09)] bg-white px-3 py-1.5 text-xs font-semibold text-[#6b7a8d] shadow-sm transition-colors hover:bg-[#f3ede1] hover:text-[#1e3a5f] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Marcar todas como leídas
@@ -116,7 +120,7 @@ export function Inicio({ onIrA }: { onIrA: (destino: DestinoInicio) => void }) {
           </div>
 
           <ul className={`${panel} divide-y divide-[rgba(30,58,95,0.09)] overflow-hidden`}>
-            {NOTIFICACIONES.map(n => {
+            {VISIBLES.map(n => {
               const e = EYEBROW[n.tipo];
               const Icono = e.icon;
               const sinLeer = !leidas.has(n.id);

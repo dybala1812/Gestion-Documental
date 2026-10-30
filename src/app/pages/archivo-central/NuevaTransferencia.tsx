@@ -11,9 +11,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  ActaExcel, DatosCajas, DocumentosDigitales, UbicacionCajas, problemasCaja, type DetalleCaja,
+  ActaExcel, DatosCajas, DocumentosDigitales, UbicacionCajas, posicionCompleta, problemasCaja, textoPosicionCaja,
+  type DetalleCaja, type PosicionCaja,
 } from "./TransferenciaPaso3";
-import { textoBodega, useUbicacionesActivas, type UbicacionBodega } from "./UbicacionFisica";
 import {
   ArrowLeft, ArrowRight, Check, CalendarCheck, CalendarX, Loader2, Save, X,
 } from "lucide-react";
@@ -86,17 +86,11 @@ export function NuevaTransferencia({
   const [observaciones, setObservaciones] = useState("");
   /** Física: caja → lo que va en su rótulo (contenido, carpetas, fechas, folios). */
   const [detalleCaja, setDetalleCaja] = useState<Record<string, DetalleCaja>>({});
-  /** Física: caja → id de la ubicación donde quedó guardada. */
-  const [ubicacionCaja, setUbicacionCaja] = useState<Record<string, string>>({});
+  /** Física: caja → carro, estante y bandeja donde quedó guardada (se escriben en esta carga, D-25). */
+  const [ubicacionCaja, setUbicacionCaja] = useState<Record<string, PosicionCaja>>({});
   /** Digital: los documentos que entregó la dependencia. */
   const [documentos, setDocumentos] = useState<File[]>([]);
   const [progreso, setProgreso] = useState("");
-  const delCatalogo = useUbicacionesActivas();
-  const [creadas, setCreadas] = useState<UbicacionBodega[]>([]);
-  const ubicaciones = useMemo(
-    () => [...delCatalogo, ...creadas.filter(c => !delCatalogo.some(u => u.id === c.id))],
-    [delCatalogo, creadas],
-  );
 
   const set = (k: keyof Datos) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setDatos(d => ({ ...d, [k]: e.target.value }));
@@ -112,17 +106,17 @@ export function NuevaTransferencia({
     () => (numeroValido ? Array.from({ length: n }, (_, i) => ({ caja: String(i + 1) })) : []),
     [n, numeroValido],
   );
-  const cajasSinUbicacion = cajas.filter(c => !ubicacionCaja[c.caja]).length;
+  const cajasSinUbicacion = cajas.filter(c => !posicionCompleta(ubicacionCaja[c.caja])).length;
 
-  // "Ubicación en bodega" del acta y de la transferencia: cada ubicación con sus cajas.
+  // "Ubicación (carro · estante · bandeja)" del acta y de la transferencia: cada ubicación con sus cajas.
   const ubicacionTexto = useMemo(() => {
     const porUbic = new Map<string, string[]>();
     for (const c of cajas) {
-      const u = ubicaciones.find(x => String(x.id) === ubicacionCaja[c.caja]);
-      if (u) porUbic.set(textoBodega(u), [...(porUbic.get(textoBodega(u)) ?? []), c.caja]);
+      const u = textoPosicionCaja(ubicacionCaja[c.caja]);
+      if (u) porUbic.set(u, [...(porUbic.get(u) ?? []), c.caja]);
     }
     return [...porUbic].map(([u, cs]) => `${u} (caja${cs.length > 1 ? "s" : ""} ${cs.join(", ")})`).join("; ");
-  }, [cajas, ubicaciones, ubicacionCaja]);
+  }, [cajas, ubicacionCaja]);
 
   const puedeContinuar =
     (paso === 1 && !!datos.dependencia && !!datos.responsable.trim() && anioPermitido) ||
@@ -159,7 +153,10 @@ export function NuevaTransferencia({
         contenido: datos.contenido,
         responsable: datos.responsable.trim(),
         ubicacion: esFisica ? ubicacionTexto : "",
-        cajas: esFisica ? cajas.map(c => ({ caja: c.caja, ubicacion_id: Number(ubicacionCaja[c.caja]) })) : undefined,
+        cajas: esFisica ? cajas.map(c => ({
+          caja: c.caja, carro: ubicacionCaja[c.caja]?.carro.trim() ?? "",
+          estante: ubicacionCaja[c.caja]?.estante.trim() ?? "", bandeja: ubicacionCaja[c.caja]?.bandeja.trim() ?? "",
+        })) : undefined,
         observaciones: esFisica ? observaciones.trim() : undefined,
         total_documentos: esFisica ? undefined : documentos.length,
         // El detalle de los documentos está en el Excel (acta). Física: una fila por caja con lo que va en su rótulo.
@@ -351,8 +348,6 @@ export function NuevaTransferencia({
               cajas={cajas}
               valor={ubicacionCaja}
               onChange={setUbicacionCaja}
-              ubicaciones={ubicaciones}
-              onNuevaUbicacion={u => setCreadas(c => [...c, u])}
               detalle={detalleCaja}
               onDetalle={setDetalleCaja}
               anio={Number(datos.anio)}

@@ -21,6 +21,9 @@ export interface NuevoDocumento {
   consecutivo?: string;
   /** AAAA-MM-DD */
   fecha?: string;
+  carro?: string;
+  estante?: string;
+  bandeja?: string;
   caja?: string;
   carpeta?: string;
   /** Id del catálogo de ubicaciones físicas (opcional). */
@@ -63,6 +66,9 @@ export interface DatosClasificacion {
   anio?: number;
   remitente?: string;
   destinatario?: string;
+  carro?: string;
+  estante?: string;
+  bandeja?: string;
   caja?: string;
   carpeta?: string;
   ubicacion_id?: number | null;
