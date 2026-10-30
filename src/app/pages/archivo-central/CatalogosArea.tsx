@@ -104,7 +104,7 @@ interface Nivel {
   id: number;
   codigo: string;
   nombre: string;
-  tipo: "pregrado" | "posgrado";
+  tipo: "pregrado" | "tecnico" | "posgrado";
   orden?: number | null;
   estado: string;
 }
@@ -167,6 +167,9 @@ const DISPOSICION_LABEL: Record<string, string> = {
   seleccion: "Selección",
   digitalizacion: "Digitalización",
 };
+
+/** Tipo de un nivel de Catálogos › Niveles. */
+const TIPO_NIVEL: Record<string, string> = { pregrado: "Pregrado", tecnico: "Técnico", posgrado: "Posgrado" };
 
 const NIVEL_LABEL: Record<string, string> = {
   pregrado: "Pregrado",
@@ -314,23 +317,24 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
         icon: Layers,
         columnas: [
           { key: "nombre", label: "Nivel" },
-          { key: "tipo", label: "Tipo", render: (r) => ((r as Nivel).tipo === "pregrado" ? "Pregrado" : "Posgrado") },
+          { key: "tipo", label: "Tipo", render: (r) => TIPO_NIVEL[(r as Nivel).tipo] ?? (r as Nivel).tipo },
           { key: "orden", label: "Orden", ancho: "w-24", render: (r) => (r as Nivel).orden ?? "—" },
           { key: "estado", label: "Estado", render: (r) => <EstadoBadge estado={(r as Nivel).estado} /> },
         ],
         campos: [
-          { key: "nombre", label: "Nombre", tipo: "texto", requerido: true, placeholder: "Ej. Especialización, Tecnología" },
+          { key: "nombre", label: "Nombre", tipo: "texto", requerido: true, placeholder: "Ej. Pregrado, Técnico, Posgrado" },
           {
             key: "tipo",
             label: "Tipo",
             tipo: "select",
             requerido: true,
             opciones: [
-              { value: "posgrado", label: "Posgrado" },
               { value: "pregrado", label: "Pregrado" },
+              { value: "tecnico", label: "Técnico" },
+              { value: "posgrado", label: "Posgrado" },
             ],
           },
-          { key: "orden", label: "Orden en las listas", tipo: "entero", placeholder: "Opcional, ej. 20" },
+          { key: "orden", label: "Orden en las listas", tipo: "entero", placeholder: "Opcional, ej. 40" },
         ],
       },
       {
@@ -589,7 +593,7 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
               <SelectContent>
                 <SelectItem value="todos">Todos los niveles</SelectItem>
                 {niveles.map((n) => (
-                  <SelectItem key={n.id} value={String(n.id)}>{n.nombre}{n.tipo === "posgrado" ? " (posgrado)" : ""}</SelectItem>
+                  <SelectItem key={n.id} value={String(n.id)}>{n.nombre}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -807,7 +811,7 @@ function CatalogoModal({ abierto, onCerrar, config, editando, dependencias, trdL
   }, [abierto, editando, config]);
 
   const relacionOpciones = (relacion?: "dependencias" | "trd" | "niveles") => {
-    if (relacion === "niveles") return niveles.map((n) => ({ value: String(n.id), label: `${n.nombre} · ${n.tipo === "pregrado" ? "Pregrado" : "Posgrado"}` }));
+    if (relacion === "niveles") return niveles.map((n) => ({ value: String(n.id), label: n.nombre }));
     if (relacion === "dependencias") return dependencias.map((d) => ({ value: String(d.id), label: `${d.codigo} · ${d.nombre}` }));
     if (relacion === "trd") return trdList.map((t) => ({ value: String(t.id), label: `${t.codigo} · ${t.nombre}` }));
     return [];

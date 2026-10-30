@@ -146,9 +146,10 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
       .then(r => setProgramas(r.datos ?? []))
       .catch(() => setProgramas([]));
   }, []);
-  // Niveles: los de Catálogos › Niveles que tienen programas activos (pregrado primero).
+  // Niveles: los de Catálogos › Niveles que tienen programas activos (Pregrado, Técnico, Posgrado).
+  const ORDEN_TIPO: Record<string, number> = { pregrado: 1, tecnico: 2, posgrado: 3 };
   const niveles = [...new Map((programas ?? []).filter(p => p.nivel_ref).map(p => [p.nivel_ref!.id, p.nivel_ref!])).values()]
-    .sort((a, b) => (a.tipo === b.tipo ? a.nombre.localeCompare(b.nombre, "es") : a.tipo === "pregrado" ? -1 : 1));
+    .sort((a, b) => (ORDEN_TIPO[a.tipo] ?? 9) - (ORDEN_TIPO[b.tipo] ?? 9) || a.nombre.localeCompare(b.nombre, "es"));
   const nivelSel = niveles.find(n => String(n.id) === datos.nivel);
   const delNivel = (nivel: string) => (programas ?? []).filter(p => String(p.nivel_id ?? "") === nivel);
   const programaSel = (programas ?? []).find(p => String(p.id) === datos.programa);
@@ -289,10 +290,10 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
             <Campo label="Nivel">
               <select className={campo} value={datos.nivel} onChange={e => setDatos(d => ({ ...d, nivel: e.target.value, programa: "" }))}>
                 <option value="">{programas === null ? "Cargando…" : niveles.length === 0 ? "Sin programas en el catálogo" : "Selecciona…"}</option>
-                {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}{n.tipo === "posgrado" ? " (posgrado)" : ""}</option>)}
+                {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
               </select>
             </Campo>
-            <Campo label={nivelSel ? (nivelSel.tipo === "posgrado" ? nivelSel.nombre : "Programa") : "Programa"}>
+            <Campo label={nivelSel?.tipo === "posgrado" ? "Especialización / programa de posgrado" : "Programa"}>
               <select className={campo} value={datos.programa} onChange={set("programa")} disabled={!datos.nivel}>
                 <option value="">{!datos.nivel ? "Primero elige el nivel" : "Selecciona…"}</option>
                 {delNivel(datos.nivel).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
