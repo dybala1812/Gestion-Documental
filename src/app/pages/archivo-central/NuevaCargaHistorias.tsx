@@ -17,12 +17,9 @@ import { tamanoLegible, type ArchivoLote, type LoteData } from "./LoteDetalle";
 const ESTADOS = ["Graduados", "Retirados", "Activos"];
 const ESTADO_DB: Record<string, EstadoHistoria> = { Graduados: "graduado", Retirados: "retirado", Activos: "activa" };
 
-/** Programa del catálogo (Catálogos › Programas académicos). El nivel también sale de ahí. */
-interface ProgramaCat { id: number; nombre: string; nivel: string }
-const NIVEL_LABEL: Record<string, string> = {
-  pregrado: "Pregrado", especializacion: "Especialización", maestria: "Maestría", doctorado: "Doctorado", posgrado: "Posgrado",
-};
-const ORDEN_NIVEL = ["pregrado", "especializacion", "maestria", "doctorado", "posgrado"];
+/** Programa del catálogo (Catálogos › Programas académicos); su nivel sale de Catálogos › Niveles. */
+interface NivelRef { id: number; nombre: string; tipo: string }
+interface ProgramaCat { id: number; nombre: string; nivel_id?: number | null; nivel_ref?: NivelRef | null }
 const ANIO_ACTUAL = new Date().getFullYear();
 const ANIOS = Array.from({ length: ANIO_ACTUAL - 1989 }, (_, i) => ANIO_ACTUAL - i);
 const MAX_MB = 50;
@@ -43,7 +40,7 @@ const SUBTITULO = [
   "confirma y se crea el lote.",
 ];
 
-/** nivel = valor del catálogo (pregrado, especializacion…); programa = id del programa. */
+/** nivel = id del nivel (Catálogos › Niveles); programa = id del programa. */
 interface Datos { estado: string; anio: string; nivel: string; programa: string; titulo: string }
 type Nivel = "verde" | "amarillo" | "rojo";
 interface Resultado {
@@ -149,13 +146,15 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
       .then(r => setProgramas(r.datos ?? []))
       .catch(() => setProgramas([]));
   }, []);
-  // Niveles: los que tienen programas activos en el catálogo, en orden.
-  const niveles = ORDEN_NIVEL.filter(n => (programas ?? []).some(p => p.nivel === n));
-  const delNivel = (nivel: string) => (programas ?? []).filter(p => p.nivel === nivel);
+  // Niveles: los de Catálogos › Niveles que tienen programas activos (pregrado primero).
+  const niveles = [...new Map((programas ?? []).filter(p => p.nivel_ref).map(p => [p.nivel_ref!.id, p.nivel_ref!])).values()]
+    .sort((a, b) => (a.tipo === b.tipo ? a.nombre.localeCompare(b.nombre, "es") : a.tipo === "pregrado" ? -1 : 1));
+  const nivelSel = niveles.find(n => String(n.id) === datos.nivel);
+  const delNivel = (nivel: string) => (programas ?? []).filter(p => String(p.nivel_id ?? "") === nivel);
   const programaSel = (programas ?? []).find(p => String(p.id) === datos.programa);
 
   const set = (k: keyof Datos) => (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => setDatos(d => ({ ...d, [k]: e.target.value }));
-  const destino = `${datos.estado} / ${datos.anio} / ${NIVEL_LABEL[datos.nivel] ?? datos.nivel} / ${programaSel?.nombre ?? ""}`;
+  const destino = `${datos.estado} / ${datos.anio} / ${nivelSel?.nombre ?? ""} / ${programaSel?.nombre ?? ""}`;
   const cuenta = (n: Nivel) => resultados.filter(r => r.nivel === n).length;
   const totalBytes = archivos.reduce((s, f) => s + f.size, 0);
 
@@ -290,10 +289,10 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
             <Campo label="Nivel">
               <select className={campo} value={datos.nivel} onChange={e => setDatos(d => ({ ...d, nivel: e.target.value, programa: "" }))}>
                 <option value="">{programas === null ? "Cargando…" : niveles.length === 0 ? "Sin programas en el catálogo" : "Selecciona…"}</option>
-                {niveles.map(n => <option key={n} value={n}>{NIVEL_LABEL[n] ?? n}</option>)}
+                {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}{n.tipo === "posgrado" ? " (posgrado)" : ""}</option>)}
               </select>
             </Campo>
-            <Campo label={datos.nivel === "especializacion" ? "Especialización" : datos.nivel && datos.nivel !== "pregrado" ? "Programa de posgrado" : "Programa"}>
+            <Campo label={nivelSel ? (nivelSel.tipo === "posgrado" ? nivelSel.nombre : "Programa") : "Programa"}>
               <select className={campo} value={datos.programa} onChange={set("programa")} disabled={!datos.nivel}>
                 <option value="">{!datos.nivel ? "Primero elige el nivel" : "Selecciona…"}</option>
                 {delNivel(datos.nivel).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}

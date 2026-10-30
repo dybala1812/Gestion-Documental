@@ -7,14 +7,15 @@ import { sgdFetch } from "./sgdApi";
 import type { UbicacionBodega } from "./clasificadosApi";
 
 export interface NodoAsunto { asunto_id: number; nombre: string; trd: string | null; total: number }
-export interface NodoAnio { anio: number; total: number; asuntos: NodoAsunto[] }
-export interface NodoDependencia { dependencia_id: number; codigo: string; nombre: string; total: number; anios: NodoAnio[] }
+export interface NodoAnio { anio: number; total: number; asuntos: NodoAsunto[]; /** Transferencias de ese año (migración 28). */ transferencias?: number }
+export interface NodoDependencia { dependencia_id: number; codigo: string; nombre: string; total: number; anios: NodoAnio[]; transferencias?: number }
 
 export type TipoCodigo = "ENT" | "SAL" | "INT";
 
 export interface ResultadoBusqueda {
   /** "historia" = documento de una historia académica: titulo = título del documento, contraparte = estudiante, dependencia = programa. */
-  origen: "documento" | "comunicacion" | "historia";
+  /** "transferencia": consecutivo = código TR-…, contraparte = quien la entregó, archivo_id = acta. */
+  origen: "documento" | "comunicacion" | "historia" | "transferencia";
   id: number;
   consecutivo: string | null;
   consecutivo_original: string | null;
@@ -58,7 +59,7 @@ export interface FiltrosBusqueda {
   persona?: string;
   trd?: string;
   texto?: string;
-  alcance?: "todo" | "documentos" | "comunicaciones" | "historias";
+  alcance?: "todo" | "documentos" | "comunicaciones" | "historias" | "transferencias";
 }
 
 export const TIPO_LEGIBLE: Record<TipoCodigo, "Entrada" | "Salida" | "Interno"> = { ENT: "Entrada", SAL: "Salida", INT: "Interno" };

@@ -27,6 +27,7 @@ import { PorClasificar } from "./PorClasificar";
 import { Clasificados } from "./Clasificados";
 import { Archivo } from "./Archivo";
 import { BusquedaAvanzada } from "./BusquedaAvanzada";
+import { HistoriasAcademicas } from "./HistoriasAcademicas";
 import { CatalogosArea } from "./CatalogosArea";
 import { PlantillasArea } from "./PlantillasArea";
 import { AuditoriaArea } from "./AuditoriaArea";
@@ -43,6 +44,8 @@ interface MenuItem {
   icon: React.ElementType;
   /** true = ya funciona; false = muestra "Próximamente". */
   disponible?: boolean;
+  /** Oculto por ahora en el menú (el código sigue; se vuelve a mostrar quitando esta marca). */
+  oculto?: boolean;
 }
 
 interface MenuGroup {
@@ -62,8 +65,9 @@ const menuGroups: MenuGroup[] = [
   {
     title: "Bandejas",
     items: [
-      { key: "por-clasificar", label: "Por clasificar", icon: Inbox, disponible: true },
-      { key: "clasificados", label: "Clasificados", icon: FolderCheck, disponible: true },
+      // Ocultos por ahora (pedido del usuario, 30/10/2026).
+      { key: "por-clasificar", label: "Por clasificar", icon: Inbox, disponible: true, oculto: true },
+      { key: "clasificados", label: "Clasificados", icon: FolderCheck, disponible: true, oculto: true },
     ],
   },
   {
@@ -71,7 +75,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { key: "archivo", label: "Archivo", icon: Archive, disponible: true },
       { key: "buscar", label: "Buscar", icon: Search, disponible: true },
-      { key: "historias", label: "Historias académicas", icon: GraduationCap },
+      { key: "historias", label: "Historias académicas", icon: GraduationCap, disponible: true },
     ],
   },
   {
@@ -79,7 +83,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { key: "bandeja", label: "Bandeja", icon: Mail, disponible: true },
       { key: "correos-sin-asociar", label: "Correos sin asociar", icon: MailQuestion, disponible: true },
-      { key: "registro-historico", label: "Registro histórico", icon: History, disponible: true },
+      { key: "registro-historico", label: "Registro histórico", icon: History, disponible: true, oculto: true },
     ],
   },
   {
@@ -134,6 +138,8 @@ export function ArchivoCentralArea() {
   const [tipoTransferencia, setTipoTransferencia] = useState<TipoEntrega | undefined>();
   /** Comunicación que se abre en la Bandeja al elegirla en la búsqueda avanzada. */
   const [abrirComunicacionId, setAbrirComunicacionId] = useState<number | null>(null);
+  /** Transferencia que se abre al elegirla en la búsqueda o en el Archivo. */
+  const [abrirTransferenciaId, setAbrirTransferenciaId] = useState<number | null>(null);
   const limpiarComunicacionAbierta = useCallback(() => setAbrirComunicacionId(null), []);
 
   const areaNombre = usuario?.dependencyName ?? "Archivo Central";
@@ -189,7 +195,7 @@ export function ArchivoCentralArea() {
   /** Lista de opciones del menú (se usa en el lateral de escritorio y en el panel de celular). */
   const listaMenu = (compacto: boolean) => (
     <nav className="space-y-1.5 [@media(min-height:860px)]:space-y-2.5 [@media(min-height:980px)]:space-y-4" aria-label="Menú de Archivo Central">
-      {menuGroups.map(group => (
+      {menuGroups.filter(g => g.items.some(i => !i.oculto)).map(group => (
         <div key={group.title}>
           {!compacto ? (
             <p className="px-3 mb-0.5 text-[10px] [@media(min-height:980px)]:text-[11px] [@media(min-height:980px)]:mb-1 font-bold uppercase tracking-[0.12em] text-[#6b7a8d]">{group.title}</p>
@@ -197,7 +203,7 @@ export function ArchivoCentralArea() {
             <div className="mx-3 mb-1.5 border-t border-[rgba(30,58,95,0.12)]" />
           )}
           <ul className="space-y-0.5 [@media(min-height:980px)]:space-y-1">
-            {group.items.map(item => {
+            {group.items.filter(item => !item.oculto).map(item => {
               const Icon = item.icon;
               const activo = seccion === item.key;
               return (
@@ -323,7 +329,12 @@ export function ArchivoCentralArea() {
           <CentroDeCargas onIrATransferencias={irATransferencias} />
         ) : seccion === "transferencias" ? (
           // La key remonta el componente cuando cambia el tipo, para que abra el asistente o la lista según corresponda.
-          <Transferencias key={tipoTransferencia ?? "lista"} tipoInicial={tipoTransferencia} />
+          <Transferencias
+            key={`${tipoTransferencia ?? "lista"}-${abrirTransferenciaId ?? ""}`}
+            tipoInicial={tipoTransferencia}
+            abrirId={abrirTransferenciaId ?? undefined}
+            onAbierta={() => setAbrirTransferenciaId(null)}
+          />
         ) : seccion === "inicio" ? (
           <Inicio onIrA={elegir} />
         ) : seccion === "por-clasificar" ? (
@@ -331,9 +342,17 @@ export function ArchivoCentralArea() {
         ) : seccion === "clasificados" ? (
           <Clasificados onCargarLote={() => elegir("centro-cargas")} />
         ) : seccion === "archivo" ? (
-          <Archivo onCargarLote={() => elegir("centro-cargas")} />
+          <Archivo
+            onCargarLote={() => elegir("centro-cargas")}
+            onAbrirTransferencia={(id) => { setAbrirTransferenciaId(id); elegir("transferencias"); }}
+          />
         ) : seccion === "buscar" ? (
-          <BusquedaAvanzada onAbrirComunicacion={(id) => { setAbrirComunicacionId(id); elegir("bandeja"); }} />
+          <BusquedaAvanzada
+            onAbrirComunicacion={(id) => { setAbrirComunicacionId(id); elegir("bandeja"); }}
+            onAbrirTransferencia={(id) => { setAbrirTransferenciaId(id); elegir("transferencias"); }}
+          />
+        ) : seccion === "historias" ? (
+          <HistoriasAcademicas onCargar={() => elegir("centro-cargas")} />
         ) : (
           <Proximamente item={actual} />
         )}

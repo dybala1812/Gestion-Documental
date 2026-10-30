@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Search, Plus, Pencil, Power, PowerOff, ChevronLeft, ChevronRight,
   AlertCircle, Building2, FolderTree, Tag, GraduationCap, MapPin, Users, X,
-  FileSpreadsheet, SlidersHorizontal, Loader2,
+  FileSpreadsheet, SlidersHorizontal, Loader2, Layers,
 } from "lucide-react";
 import { ImportarCatalogo } from "./ImportarCatalogo";
 import { ParametrosPanel } from "./ParametrosPanel";
@@ -93,7 +93,19 @@ interface Programa {
   id: number;
   codigo?: string | null;
   nombre: string;
-  nivel: string;
+  nivel?: string | null;
+  nivel_id?: number | null;
+  nivel_ref?: { id: number; nombre: string; tipo: string } | null;
+  estado: string;
+}
+
+/** Nivel de formación (Catálogos › Niveles): Pregrado, Especialización, Maestría… */
+interface Nivel {
+  id: number;
+  codigo: string;
+  nombre: string;
+  tipo: "pregrado" | "posgrado";
+  orden?: number | null;
   estado: string;
 }
 
@@ -120,7 +132,7 @@ interface Usuario {
   dependencia?: Relacion | null;
 }
 
-type FilaCatalogo = Dependencia | TRD | Asunto | TipoDocumental | Programa | Ubicacion | Usuario;
+type FilaCatalogo = Dependencia | TRD | Asunto | TipoDocumental | Nivel | Programa | Ubicacion | Usuario;
 
 // ── Configuración de cada catálogo ─────────────────────────────────────────
 
@@ -131,7 +143,7 @@ interface CampoForm {
   label: string;
   tipo: TipoCampo;
   opciones?: { value: string; label: string }[];
-  relacion?: "dependencias" | "trd";
+  relacion?: "dependencias" | "trd" | "niveles";
   requerido?: boolean;
   placeholder?: string;
 }
@@ -206,6 +218,11 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
 
   const [dependencias, setDependencias] = useState<Dependencia[]>([]);
   const [trdList, setTrdList] = useState<TRD[]>([]);
+  const [niveles, setNiveles] = useState<Nivel[]>([]);
+  const recargarNiveles = () =>
+    listarCatalogo<Nivel>("niveles", { limite: 200, estado: "activo" })
+      .then((r) => setNiveles(r.datos))
+      .catch(() => setNiveles([]));
 
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState<FilaCatalogo | null>(null);
@@ -292,30 +309,47 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
         campos: [{ key: "nombre", label: "Nombre", tipo: "texto", requerido: true }],
       },
       {
+        slug: "niveles",
+        label: "Niveles",
+        icon: Layers,
+        columnas: [
+          { key: "nombre", label: "Nivel" },
+          { key: "tipo", label: "Tipo", render: (r) => ((r as Nivel).tipo === "pregrado" ? "Pregrado" : "Posgrado") },
+          { key: "orden", label: "Orden", ancho: "w-24", render: (r) => (r as Nivel).orden ?? "—" },
+          { key: "estado", label: "Estado", render: (r) => <EstadoBadge estado={(r as Nivel).estado} /> },
+        ],
+        campos: [
+          { key: "nombre", label: "Nombre", tipo: "texto", requerido: true, placeholder: "Ej. Especialización, Tecnología" },
+          {
+            key: "tipo",
+            label: "Tipo",
+            tipo: "select",
+            requerido: true,
+            opciones: [
+              { value: "posgrado", label: "Posgrado" },
+              { value: "pregrado", label: "Pregrado" },
+            ],
+          },
+          { key: "orden", label: "Orden en las listas", tipo: "entero", placeholder: "Opcional, ej. 20" },
+        ],
+      },
+      {
         slug: "programas",
         label: "Programas académicos",
         icon: GraduationCap,
         columnas: [
           { key: "codigo", label: "Código", ancho: "w-32" },
           { key: "nombre", label: "Nombre" },
-          { key: "nivel", label: "Nivel", render: (r) => NIVEL_LABEL[(r as Programa).nivel] ?? (r as Programa).nivel },
+          {
+            key: "nivel", label: "Nivel",
+            render: (r) => (r as Programa).nivel_ref?.nombre ?? NIVEL_LABEL[(r as Programa).nivel ?? ""] ?? (r as Programa).nivel ?? "—",
+          },
           { key: "estado", label: "Estado", render: (r) => <EstadoBadge estado={(r as Programa).estado} /> },
         ],
         campos: [
           { key: "codigo", label: "Código", tipo: "texto", placeholder: "Opcional" },
           { key: "nombre", label: "Nombre", tipo: "texto", requerido: true },
-          {
-            key: "nivel",
-            label: "Nivel",
-            tipo: "select",
-            requerido: true,
-            opciones: [
-              { value: "pregrado", label: "Pregrado" },
-              { value: "especializacion", label: "Especialización" },
-              { value: "maestria", label: "Maestría" },
-              { value: "doctorado", label: "Doctorado" },
-            ],
-          },
+          { key: "nivel_id", label: "Nivel (de Catálogos › Niveles)", tipo: "entero", relacion: "niveles", requerido: true },
         ],
       },
       {
@@ -378,6 +412,7 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
     listarCatalogo<TRD>("trd", { limite: 1000 })
       .then((r) => setTrdList(r.datos))
       .catch(() => setTrdList([]));
+    recargarNiveles();
   }, []);
 
   const cargar = async () => {
@@ -389,7 +424,7 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
         limite,
       };
       if (estadoFiltro !== "todos") params.estado = estadoFiltro;
-      if (tab === "programas" && nivelFiltro !== "todos") params.nivel = nivelFiltro;
+      if (tab === "programas" && nivelFiltro !== "todos") params.nivel_id = nivelFiltro;
       if (buscar.trim()) params.buscar = buscar.trim();
       const res = await listarCatalogo<FilaCatalogo>(tab, params);
       setDatos(res.datos);
@@ -553,8 +588,8 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos los niveles</SelectItem>
-                {Object.entries(NIVEL_LABEL).map(([v, l]) => (
-                  <SelectItem key={v} value={v}>{v === "especializacion" ? "Especializaciones (posgrado)" : l}</SelectItem>
+                {niveles.map((n) => (
+                  <SelectItem key={n.id} value={String(n.id)}>{n.nombre}{n.tipo === "posgrado" ? " (posgrado)" : ""}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -662,7 +697,8 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
         editando={editando}
         dependencias={dependencias}
         trdList={trdList}
-        onGuardado={cargar}
+        niveles={niveles}
+        onGuardado={() => { cargar(); if (tab === "niveles") recargarNiveles(); }}
       />
 
       {IMPORTABLES.includes(tab as SlugCatalogo) && (
@@ -739,10 +775,11 @@ interface ModalProps {
   editando: FilaCatalogo | null;
   dependencias: Dependencia[];
   trdList: TRD[];
+  niveles: Nivel[];
   onGuardado: () => void;
 }
 
-function CatalogoModal({ abierto, onCerrar, config, editando, dependencias, trdList, onGuardado }: ModalProps) {
+function CatalogoModal({ abierto, onCerrar, config, editando, dependencias, trdList, niveles, onGuardado }: ModalProps) {
   const [valores, setValores] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState(false);
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -769,7 +806,8 @@ function CatalogoModal({ abierto, onCerrar, config, editando, dependencias, trdL
     setErrores({});
   }, [abierto, editando, config]);
 
-  const relacionOpciones = (relacion?: "dependencias" | "trd") => {
+  const relacionOpciones = (relacion?: "dependencias" | "trd" | "niveles") => {
+    if (relacion === "niveles") return niveles.map((n) => ({ value: String(n.id), label: `${n.nombre} · ${n.tipo === "pregrado" ? "Pregrado" : "Posgrado"}` }));
     if (relacion === "dependencias") return dependencias.map((d) => ({ value: String(d.id), label: `${d.codigo} · ${d.nombre}` }));
     if (relacion === "trd") return trdList.map((t) => ({ value: String(t.id), label: `${t.codigo} · ${t.nombre}` }));
     return [];

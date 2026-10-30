@@ -5,6 +5,7 @@
 import { sgdFetch } from "./sgdApi";
 
 export type SlugCatalogo =
+  | "niveles"
   | "dependencias"
   | "trd"
   | "asuntos"
