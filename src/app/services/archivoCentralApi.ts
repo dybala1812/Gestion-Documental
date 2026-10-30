@@ -69,8 +69,8 @@ export interface NuevaTransferenciaDto {
   responsable: string; ubicacion: string; carpetas: CarpetaDto[];
   /** Acta de entrega: el archivo que entregó la dependencia, subido antes con `subirActa`. */
   acta_archivo_id?: string;
-  /** Física: dónde quedó guardada cada caja (id del catálogo de ubicaciones). Obligatorio para todas las cajas. */
-  cajas?: { caja: string; ubicacion_id: number }[];
+  /** Física: dónde quedó guardada cada caja (carro, estante y bandeja escritos en la carga). Obligatorio para todas. */
+  cajas?: { caja: string; carro: string; estante: string; bandeja: string }[];
   /** Física: novedades de la entrega. */
   observaciones?: string;
   /** Digital: cuántos documentos se van a subir. */

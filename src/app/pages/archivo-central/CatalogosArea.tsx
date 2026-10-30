@@ -507,7 +507,7 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#c89b14] mb-1">Administración</p>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#1e3a5f]">Catálogos</h1>
           <p className="text-sm text-[#6b7a8d] mt-1">
-            Dependencias, TRD, asuntos, tipos documentales, programas, ubicaciones, usuarios y parámetros.
+            Dependencias, TRD, asuntos, tipos documentales, niveles, programas, usuarios y parámetros.
           </p>
         </div>
         {!esParametros && (
@@ -529,7 +529,8 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
       {/* Pestañas */}
       <Tabs value={tab} onValueChange={(v) => setTab(v as Pestana)} className="w-full">
         <TabsList className="bg-white border border-[rgba(30,58,95,0.12)] p-1 rounded-xl flex-wrap h-auto gap-1">
-          {configs.map((c) => {
+          {/* Ubicaciones físicas: oculta (D-25, carro · estante · bandeja se escriben en cada carga). */}
+          {configs.filter((c) => c.slug !== "ubicaciones").map((c) => {
             const Icon = c.icon;
             return (
               <TabsTrigger
