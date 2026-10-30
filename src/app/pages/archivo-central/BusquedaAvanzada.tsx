@@ -103,6 +103,7 @@ export function BusquedaAvanzada({ onAbrirComunicacion }: { onAbrirComunicacion:
           tipo: abierto.tipo ? TIPO_LEGIBLE[abierto.tipo] : null, titulo: abierto.titulo,
           dependencia: abierto.dependencia ?? "—", anio: abierto.anio, asunto: abierto.asunto ?? "Sin asunto",
           trd: abierto.trd ?? "—", contraparte: abierto.contraparte ?? "—", persona: "—",
+          carro: abierto.carro ?? "", estante: abierto.estante ?? "", bandeja: abierto.bandeja ?? "",
           caja: abierto.caja ?? "—", carpeta: abierto.carpeta ?? "—", ubicacion: abierto.ubicacion ?? null,
           archivo: abierto.titulo, paginas: 1,
           origen: "—", estado: "Clasificado",

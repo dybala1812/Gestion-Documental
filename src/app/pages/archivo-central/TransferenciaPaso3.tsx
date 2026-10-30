@@ -3,8 +3,8 @@
  * @description Pasos 2 y 3 de "Nueva transferencia":
  *  - Paso 2 (`ActaExcel`): se sube el Excel que entregó la dependencia, tal cual. Queda como acta de entrega;
  *    no se lee fila por fila ni se valida.
- *  - Paso 3 física (`DatosCajas`): las cajas NO se suben; se quedan en bodega. Se llena cuántas cajas llegaron,
- *    dónde quedó guardada cada una (Bodega · Estante · Módulo del catálogo; se puede crear aquí mismo) y observaciones.
+ *  - Paso 3 física (`DatosCajas`): las cajas NO se suben; se quedan en Archivo Central. Se llena cuántas cajas llegaron,
+ *    dónde quedó guardada cada una (Carro · Estante · Bandeja del catálogo, D-23; se puede crear aquí mismo) y observaciones.
  *  - Paso 3 digital (`DocumentosDigitales`): cargue masivo de los documentos; se guardan con la transferencia (no pasan a Por clasificar).
  */
 import { useId, useState } from "react";
@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Archive, Copy, FileSpreadsheet, FileText, MapPin, Plus, Trash2, UploadCloud, X } from "lucide-react";
 import { crearCatalogo } from "../../lib/catalogosApi";
 import { VistaPreviaArchivo } from "../comunicaciones/VisorArchivos";
-import { textoBodega, type UbicacionBodega } from "./UbicacionFisica";
+import { textoPosicion, type UbicacionBodega } from "./UbicacionFisica";
 
 const campo =
   "h-10 w-full rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 text-sm text-[#2c3e50] placeholder:text-[#6b7a8d]/70 focus:border-[#e8740e] focus:outline-none focus:ring-2 focus:ring-[#e8740e]/30";
@@ -143,7 +143,7 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
       return [c.caja, { ...d, contenido: d.contenido || p.contenido, fechaInicial: d.fechaInicial || p.fechaInicial, fechaFinal: d.fechaFinal || p.fechaFinal }];
     })));
   };
-  const [nueva, setNueva] = useState({ bodega: "", estante: "", modulo: "" });
+  const [nueva, setNueva] = useState({ carro: "", estante: "", bandeja: "" });
   const [creando, setCreando] = useState(false);
   const [mostrarNueva, setMostrarNueva] = useState(ubicaciones.length === 0);
   const faltan = cajas.filter(c => !valor[c.caja]).length;
@@ -152,20 +152,18 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
   const todas = (id: string) => onChange(Object.fromEntries(cajas.map(c => [c.caja, id])));
 
   const crear = async () => {
-    if (!nueva.bodega.trim()) return toast.error("Escribe al menos la bodega");
+    if (!nueva.carro.trim() || !nueva.estante.trim() || !nueva.bandeja.trim()) return toast.error("Escribe el carro, el estante y la bandeja");
     setCreando(true);
     try {
       const u = await crearCatalogo<UbicacionBodega>("ubicaciones", {
-        bodega: nueva.bodega.trim(),
-        ...(nueva.estante.trim() ? { estante: nueva.estante.trim() } : {}),
-        ...(nueva.modulo.trim() ? { modulo: nueva.modulo.trim() } : {}),
+        carro: nueva.carro.trim(), estante: nueva.estante.trim(), bandeja: nueva.bandeja.trim(),
       });
       onNuevaUbicacion(u);
       // Las cajas que aún no tienen ubicación quedan en la nueva.
       onChange(Object.fromEntries(cajas.map(c => [c.caja, valor[c.caja] || String(u.id)])));
-      setNueva({ bodega: "", estante: "", modulo: "" });
+      setNueva({ carro: "", estante: "", bandeja: "" });
       setMostrarNueva(false);
-      toast.success(`Ubicación creada: ${textoBodega(u)}`);
+      toast.success(`Ubicación creada: ${textoPosicion(u)}`);
     } catch (e) {
       toast.error("No se pudo crear la ubicación", { description: e instanceof Error ? e.message : undefined });
     } finally {
@@ -178,7 +176,7 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
       <div className="flex items-start gap-3 rounded-xl border-2 border-[#1e3a5f] bg-white px-5 py-4">
         <Archive className="mt-0.5 h-5 w-5 shrink-0 text-[#1e3a5f]" aria-hidden />
         <p className="text-sm text-[#2c3e50]">
-          Las cajas <strong>no se suben</strong>: se quedan guardadas en físico. Registra en qué bodega, estante y módulo
+          Las cajas <strong>no se suben</strong>: se quedan guardadas en físico. Registra en qué carro, estante y bandeja
           quedó guardada cada una ({cajas.length} caja{cajas.length === 1 ? "" : "s"})
           {conRotulo && " y lo que va en su rótulo: contenido, carpetas, fechas y folios"}.
         </p>
@@ -191,7 +189,7 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
               <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Poner todas las cajas en</span>
               <select className={campo} value="" onChange={e => e.target.value && todas(e.target.value)}>
                 <option value="">Elegir ubicación…</option>
-                {ubicaciones.map(u => <option key={u.id} value={u.id}>{textoBodega(u)}</option>)}
+                {ubicaciones.map(u => <option key={u.id} value={u.id}>{textoPosicion(u)}</option>)}
               </select>
             </label>
           ) : (
@@ -212,16 +210,16 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
         {mostrarNueva && (
           <div className="mb-5 grid grid-cols-1 gap-3 rounded-lg border border-[rgba(30,58,95,0.09)] bg-[#f3ede1]/50 p-4 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
             <label className="block">
-              <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Bodega <span className="text-[#e8740e]">*</span></span>
-              <input className={campo} placeholder="Ej. Bodega 1" value={nueva.bodega} onChange={e => setNueva(n => ({ ...n, bodega: e.target.value }))} />
+              <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Carro <span className="text-[#e8740e]">*</span></span>
+              <input className={campo} placeholder="Ej. 1" value={nueva.carro} onChange={e => setNueva(n => ({ ...n, carro: e.target.value }))} />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Estante</span>
-              <input className={campo} placeholder="Ej. 4" value={nueva.estante} onChange={e => setNueva(n => ({ ...n, estante: e.target.value }))} />
+              <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Estante <span className="text-[#e8740e]">*</span></span>
+              <input className={campo} placeholder="Ej. 2" value={nueva.estante} onChange={e => setNueva(n => ({ ...n, estante: e.target.value }))} />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Módulo</span>
-              <input className={campo} placeholder="Ej. 2" value={nueva.modulo} onChange={e => setNueva(n => ({ ...n, modulo: e.target.value }))} />
+              <span className="mb-1 block text-xs font-bold text-[#2c3e50]">Bandeja <span className="text-[#e8740e]">*</span></span>
+              <input className={campo} placeholder="Ej. 3" value={nueva.bandeja} onChange={e => setNueva(n => ({ ...n, bandeja: e.target.value }))} />
             </label>
             <button
               type="button" onClick={crear} disabled={creando}
@@ -289,7 +287,7 @@ export function UbicacionCajas({ cajas, valor, onChange, ubicaciones, onNuevaUbi
                       onChange={e => onChange({ ...valor, [c.caja]: e.target.value })}
                     >
                       <option value="">Sin asignar</option>
-                      {ubicaciones.map(u => <option key={u.id} value={u.id}>{textoBodega(u)}</option>)}
+                      {ubicaciones.map(u => <option key={u.id} value={u.id}>{textoPosicion(u)}</option>)}
                     </select>
                   </td>
                 </tr>

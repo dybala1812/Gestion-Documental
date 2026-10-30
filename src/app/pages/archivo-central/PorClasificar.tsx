@@ -45,7 +45,7 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
           dependenciaId: d.dependencia_id,
           previo: {
             tipo: d.tipo, consecutivo: d.consecutivo, fecha: d.fecha,
-            caja: d.caja, carpeta: d.carpeta, ubicacionId: d.ubicacion?.id ?? null,
+            carro: d.carro, estante: d.estante, bandeja: d.bandeja, caja: d.caja, carpeta: d.carpeta,
           },
         })));
       })

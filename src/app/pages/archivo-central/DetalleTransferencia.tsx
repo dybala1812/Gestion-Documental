@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { AlertCircle, ArrowLeft, FileText, Loader2 } from "lucide-react";
-import { textoBodega } from "./UbicacionFisica";
+import { textoPosicion } from "./UbicacionFisica";
 import { transferenciasApi, type DetalleTransferenciaApi } from "../../services/archivoCentralApi";
 import { VisorArchivos } from "../comunicaciones/VisorArchivos";
 import { ListaVerificaciones, RevisionActa, verificaciones } from "./RevisionActa";
@@ -132,7 +132,7 @@ export function DetalleTransferencia({ id, onVolver }: { id: number; onVolver: (
               <thead>
                 <tr className="border-b-[3px] border-[#e8740e] bg-[#1e3a5f]">
                   <th className={th}>Caja</th>
-                  <th className={th}>Bodega · Estante · Módulo</th>
+                  <th className={th}>Carro · Estante · Bandeja</th>
                 </tr>
               </thead>
               <tbody>
@@ -142,7 +142,7 @@ export function DetalleTransferencia({ id, onVolver }: { id: number; onVolver: (
                 {cajas.map(([caja, u]) => (
                   <tr key={caja} className="border-t border-[rgba(30,58,95,0.09)] odd:bg-white even:bg-[#f3ede1]/40">
                     <td className="px-3 py-2 text-sm font-bold text-[#1e3a5f]">Caja {caja}</td>
-                    <td className="px-3 py-2 text-sm text-[#2c3e50]">{u ? textoBodega(u) : <span className="text-[#6b7a8d]">Sin asignar</span>}</td>
+                    <td className="px-3 py-2 text-sm text-[#2c3e50]">{u ? textoPosicion(u) : <span className="text-[#6b7a8d]">Sin asignar</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -178,7 +178,7 @@ export function DetalleTransferencia({ id, onVolver }: { id: number; onVolver: (
                   <td className="px-3 py-2 text-sm text-[#2c3e50]">{c.caja}</td>
                   {esFisica && (
                     <td className="whitespace-nowrap px-3 py-2 text-sm font-semibold text-[#1e3a5f]">
-                      {c.ubicacion ? textoBodega(c.ubicacion) : <span className="font-normal text-[#6b7a8d]">Sin asignar</span>}
+                      {c.ubicacion ? textoPosicion(c.ubicacion) : <span className="font-normal text-[#6b7a8d]">Sin asignar</span>}
                     </td>
                   )}
                   <td className="px-3 py-2 text-sm text-[#2c3e50]">{c.carpeta ?? "—"}</td>

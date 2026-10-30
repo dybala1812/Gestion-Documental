@@ -97,10 +97,13 @@ interface Programa {
   estado: string;
 }
 
+/** Posición en Archivo Central: Carro → Estante → Bandeja (D-23). Bodega y módulo: registros viejos. */
 interface Ubicacion {
   id: number;
-  bodega: string;
+  carro?: string | null;
   estante?: string | null;
+  bandeja?: string | null;
+  bodega?: string | null;
   modulo?: string | null;
   descripcion?: string | null;
   estado: string;
@@ -155,6 +158,7 @@ const DISPOSICION_LABEL: Record<string, string> = {
 
 const NIVEL_LABEL: Record<string, string> = {
   pregrado: "Pregrado",
+  posgrado: "Posgrado",
   especializacion: "Especialización",
   maestria: "Maestría",
   doctorado: "Doctorado",
@@ -191,6 +195,8 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [buscar, setBuscar] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState<"todos" | "activo" | "inactivo">("todos");
+  /** Programas académicos: filtra por nivel (p. ej. solo las especializaciones de posgrado). */
+  const [nivelFiltro, setNivelFiltro] = useState<string>("todos");
   const [pagina, setPagina] = useState(1);
   const [limite] = useState(20);
   const [cargando, setCargando] = useState(false);
@@ -317,16 +323,16 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
         label: "Ubicaciones físicas",
         icon: MapPin,
         columnas: [
-          { key: "bodega", label: "Bodega", ancho: "w-32" },
-          { key: "estante", label: "Estante", ancho: "w-28" },
-          { key: "modulo", label: "Módulo", ancho: "w-28" },
+          { key: "carro", label: "Carro", ancho: "w-28", render: (r) => (r as Ubicacion).carro ?? (r as Ubicacion).bodega ?? "—" },
+          { key: "estante", label: "Estante", ancho: "w-28", render: (r) => (r as Ubicacion).estante ?? "—" },
+          { key: "bandeja", label: "Bandeja", ancho: "w-28", render: (r) => (r as Ubicacion).bandeja ?? (r as Ubicacion).modulo ?? "—" },
           { key: "descripcion", label: "Descripción", render: (r) => (r as Ubicacion).descripcion ?? "—" },
           { key: "estado", label: "Estado", render: (r) => <EstadoBadge estado={(r as Ubicacion).estado} /> },
         ],
         campos: [
-          { key: "bodega", label: "Bodega", tipo: "texto", requerido: true },
-          { key: "estante", label: "Estante", tipo: "texto" },
-          { key: "modulo", label: "Módulo", tipo: "texto" },
+          { key: "carro", label: "Carro", tipo: "texto", requerido: true },
+          { key: "estante", label: "Estante", tipo: "texto", requerido: true },
+          { key: "bandeja", label: "Bandeja", tipo: "texto", requerido: true },
           { key: "descripcion", label: "Descripción", tipo: "textarea" },
         ],
       },
@@ -383,6 +389,7 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
         limite,
       };
       if (estadoFiltro !== "todos") params.estado = estadoFiltro;
+      if (tab === "programas" && nivelFiltro !== "todos") params.nivel = nivelFiltro;
       if (buscar.trim()) params.buscar = buscar.trim();
       const res = await listarCatalogo<FilaCatalogo>(tab, params);
       setDatos(res.datos);
@@ -398,11 +405,11 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
 
   useEffect(() => {
     setPagina(1);
-  }, [tab, buscar, estadoFiltro]);
+  }, [tab, buscar, estadoFiltro, nivelFiltro]);
 
   useEffect(() => {
     cargar();
-  }, [tab, pagina, buscar, estadoFiltro]);
+  }, [tab, pagina, buscar, estadoFiltro, nivelFiltro]);
 
   const abrirCrear = () => {
     setEditando(null);
@@ -449,6 +456,7 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
     if (!f) return "";
     const o = f as unknown as Record<string, unknown>;
     if (typeof o.apellido === "string") return `${o.nombre} ${o.apellido}`;
+    if ("carro" in o || "bandeja" in o) return [o.carro && `Carro ${o.carro}`, o.estante && `Estante ${o.estante}`, o.bandeja && `Bandeja ${o.bandeja}`].filter(Boolean).join(" · ") || String(o.bodega ?? "");
     return [o.codigo, o.nombre ?? o.bodega].filter(Boolean).join(" · ");
   };
 
@@ -538,6 +546,19 @@ export function CatalogosArea({ usuarioNombre: _usuarioNombre }: { usuarioNombre
               ))}
             </SelectContent>
           </Select>
+          {tab === "programas" && (
+            <Select value={nivelFiltro} onValueChange={setNivelFiltro}>
+              <SelectTrigger aria-label="Nivel" className="w-full sm:w-52 border-[rgba(30,58,95,0.12)]">
+                <SelectValue placeholder="Nivel" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los niveles</SelectItem>
+                {Object.entries(NIVEL_LABEL).map(([v, l]) => (
+                  <SelectItem key={v} value={v}>{v === "especializacion" ? "Especializaciones (posgrado)" : l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 

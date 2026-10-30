@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { alertaCarga, motivoError, plural } from "../../lib/alertasCarga";
 import { apiListDependenciasCom, type DependenciaCom } from "../../lib/comunicacionesApi";
 import { apiCrearDocumento, apiListAsuntos, type AsuntoCat } from "../../lib/documentosApi";
-import { textoUbicacion, UBICACION_VACIA, UbicacionCampos, useUbicacionesActivas, type ValorUbicacion } from "./UbicacionFisica";
+import { textoUbicacion, UBICACION_VACIA, UbicacionCampos, type ValorUbicacion } from "./UbicacionFisica";
 import {
   AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, FileInput, FileText,
   Info, Loader2, UploadCloud, X, XCircle,
@@ -92,7 +92,6 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
   const [creando, setCreando] = useState(false);
   const [dependencias, setDependencias] = useState<DependenciaCom[]>([]);
   const [asuntos, setAsuntos] = useState<AsuntoCat[]>([]);
-  const ubicaciones = useUbicacionesActivas();
 
   useEffect(() => {
     apiListDependenciasCom().then(setDependencias).catch(e => alertaCarga.error("No se pudieron cargar las dependencias", motivoError(e, "Revisa la conexión con el servidor e intenta de nuevo.")));
@@ -158,9 +157,11 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
             tipo: datos.tipo,
             consecutivo: datos.consecutivo.trim() || undefined,
             fecha: datos.fecha || undefined,
+            carro: datos.ubicacion.carro.trim() || undefined,
+            estante: datos.ubicacion.estante.trim() || undefined,
+            bandeja: datos.ubicacion.bandeja.trim() || undefined,
             caja: datos.ubicacion.caja.trim() || undefined,
             carpeta: datos.ubicacion.carpeta.trim() || undefined,
-            ubicacion_id: datos.ubicacion.ubicacion_id ? Number(datos.ubicacion.ubicacion_id) : undefined,
           });
           guardados++;
         } catch (e) {
@@ -278,7 +279,6 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
               <UbicacionCampos
                 valor={datos.ubicacion}
                 onChange={ubicacion => setDatos(d => ({ ...d, ubicacion }))}
-                ubicaciones={ubicaciones}
               />
             </div>
             <p className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
@@ -360,10 +360,7 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
                 ["Dependencia", nombreDependencia], ["Año", datos.anio],
                 ["Asunto", nombreAsunto || "Sin asunto · por clasificar"], ["Tipo", datos.tipo],
                 ["Consecutivo", datos.consecutivo || "—"], ["Fecha", datos.fecha || "—"],
-                ["Ubicación física", textoUbicacion({
-                  ...datos.ubicacion,
-                  ubicacion: ubicaciones.find(u => String(u.id) === datos.ubicacion.ubicacion_id),
-                })],
+                ["Ubicación física", textoUbicacion(datos.ubicacion)],
               ] as const).map(([k, v]) => (
                 <div key={k}>
                   <dt className="text-[11px] font-bold uppercase tracking-wide text-[#6b7a8d]">{k}</dt>

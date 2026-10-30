@@ -5,8 +5,9 @@
  * El nombre del archivo debe seguir la convención "APELLIDOS NOMBRES - cédula.pdf" (por acordar).
  * Calcula la huella SHA-256 en el navegador; la detección de duplicados contra el archivo existente la hace el backend (TODO).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { alertaCarga, plural } from "../../lib/alertasCarga";
+import { listarCatalogo } from "../../lib/catalogosApi";
 import { ArrowLeft, ArrowRight, Check, FileText, FolderUp, GraduationCap, Info, Loader2, UploadCloud, Wand2, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { tamanoLegible, type ArchivoLote, type LoteData } from "./LoteDetalle";
@@ -14,7 +15,15 @@ import { tamanoLegible, type ArchivoLote, type LoteData } from "./LoteDetalle";
 /* ───────────────────────── Catálogos de ejemplo (luego, de la API) ───────────────────────── */
 const ESTADOS = ["Graduados", "Retirados", "Activos"];
 const NIVELES = ["Pregrado", "Posgrado"];
-const PROGRAMAS = ["Ingeniería de Sistemas", "Derecho", "Psicología", "Contaduría Pública", "Administración de Empresas"];
+
+/** Programa del catálogo (Catálogos › Programas académicos). */
+interface ProgramaCat { id: number; nombre: string; nivel: "pregrado" | "especializacion" | "maestria" | "doctorado" }
+/** En Posgrado se listan las especializaciones (y maestrías y doctorados, si el catálogo los tiene). */
+const GRUPOS_POSGRADO: { nivel: ProgramaCat["nivel"]; titulo: string }[] = [
+  { nivel: "especializacion", titulo: "Especializaciones" },
+  { nivel: "maestria", titulo: "Maestrías" },
+  { nivel: "doctorado", titulo: "Doctorados" },
+];
 const ANIO_ACTUAL = new Date().getFullYear();
 const ANIOS = Array.from({ length: ANIO_ACTUAL - 1989 }, (_, i) => ANIO_ACTUAL - i);
 const MAX_MB = 50;
@@ -123,6 +132,16 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
   const [resultados, setResultados] = useState<Resultado[]>([]);
   const [arrastrando, setArrastrando] = useState(false);
   const [validando, setValidando] = useState(false);
+  const [programas, setProgramas] = useState<ProgramaCat[] | null>(null);
+
+  // Programas activos del catálogo; Pregrado y Posgrado muestran los suyos.
+  useEffect(() => {
+    listarCatalogo<ProgramaCat>("programas", { estado: "activo", limite: 500 })
+      .then(r => setProgramas(r.datos ?? []))
+      .catch(() => setProgramas([]));
+  }, []);
+  const delNivel = (nivel: string) =>
+    (programas ?? []).filter(p => (nivel === "Pregrado" ? p.nivel === "pregrado" : p.nivel !== "pregrado"));
 
   const set = (k: keyof Datos) => (e: React.ChangeEvent<HTMLSelectElement>) => setDatos(d => ({ ...d, [k]: e.target.value }));
   const destino = `${datos.estado} / ${datos.anio} / ${datos.nivel} / ${datos.programa}`;
@@ -236,14 +255,27 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
               <select className={campo} value={datos.anio} onChange={set("anio")}>{ANIOS.map(x => <option key={x}>{x}</option>)}</select>
             </Campo>
             <Campo label="Nivel">
-              <select className={campo} value={datos.nivel} onChange={set("nivel")}>
+              <select className={campo} value={datos.nivel} onChange={e => setDatos(d => ({ ...d, nivel: e.target.value, programa: "" }))}>
                 <option value="">Selecciona…</option>{NIVELES.map(x => <option key={x}>{x}</option>)}
               </select>
             </Campo>
-            <Campo label="Programa">
-              <select className={campo} value={datos.programa} onChange={set("programa")}>
-                <option value="">Selecciona…</option>{PROGRAMAS.map(x => <option key={x}>{x}</option>)}
+            <Campo label={datos.nivel === "Posgrado" ? "Especialización / posgrado" : "Programa"}>
+              <select className={campo} value={datos.programa} onChange={set("programa")} disabled={!datos.nivel}>
+                <option value="">{!datos.nivel ? "Primero elige el nivel" : programas === null ? "Cargando…" : "Selecciona…"}</option>
+                {datos.nivel === "Posgrado"
+                  ? GRUPOS_POSGRADO.map(g => {
+                      const lista = delNivel("Posgrado").filter(p => p.nivel === g.nivel);
+                      return lista.length > 0 && (
+                        <optgroup key={g.nivel} label={g.titulo}>{lista.map(p => <option key={p.id}>{p.nombre}</option>)}</optgroup>
+                      );
+                    })
+                  : delNivel("Pregrado").map(p => <option key={p.id}>{p.nombre}</option>)}
               </select>
+              {datos.nivel && programas !== null && delNivel(datos.nivel).length === 0 && (
+                <span className="mt-1 block text-xs text-[#6b7a8d]">
+                  No hay {datos.nivel === "Posgrado" ? "especializaciones" : "programas de pregrado"} activos: agrégalos en Catálogos › Programas académicos.
+                </span>
+              )}
             </Campo>
           </div>
           <p className="flex items-start gap-2 rounded-xl border-2 border-[#1e3a5f] bg-[#eef2f7] px-4 py-3 text-sm text-[#2c3e50]">

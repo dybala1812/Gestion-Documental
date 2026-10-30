@@ -8,6 +8,7 @@
 
 import { SGD_API_BASE, mensajeErrorSgd } from "../lib/sgdApi";
 import { tokens } from "../lib/api";
+import type { UbicacionBodega } from "../lib/clasificadosApi";
 import { leerSesionTemporal } from "../lib/loginTemporal"; // ⚠️ TEMPORAL
 
 // La misma URL que sgdApi (también sirve desde otro equipo de la red local).
@@ -91,7 +92,7 @@ export interface DetalleTransferenciaApi {
     consecutivoDesde: string | null; consecutivoHasta: string | null;
     descripcion: string | null;
     /** Dónde quedó guardada la caja (física). */
-    ubicacion?: { id: number; bodega: string; estante: string | null; modulo: string | null } | null;
+    ubicacion?: UbicacionBodega | null;
   }[];
   /** Digital: los archivos que entregó la dependencia, guardados con la transferencia (no pasan a Por clasificar). */
   archivos?: { id: string; nombre: string; mime: string; tamano: number }[];

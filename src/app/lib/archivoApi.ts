@@ -27,6 +27,10 @@ export interface ResultadoBusqueda {
   asunto: string | null;
   trd: string | null;
   archivo_id: string | null;
+  /** Carro · Estante · Bandeja, cuando la búsqueda los devuelva (fn_archivo_buscar aún no los incluye). */
+  carro?: string | null;
+  estante?: string | null;
+  bandeja?: string | null;
   caja: string | null;
   carpeta: string | null;
   /** Bodega · estante · módulo, cuando la búsqueda la devuelva (la función SQL aún no la incluye). */

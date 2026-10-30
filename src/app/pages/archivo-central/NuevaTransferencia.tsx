@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import {
   ActaExcel, DatosCajas, DocumentosDigitales, UbicacionCajas, problemasCaja, type DetalleCaja,
 } from "./TransferenciaPaso3";
-import { textoBodega, useUbicacionesActivas, type UbicacionBodega } from "./UbicacionFisica";
+import { textoPosicion, useUbicacionesActivas, type UbicacionBodega } from "./UbicacionFisica";
 import {
   ArrowLeft, ArrowRight, Check, CalendarCheck, CalendarX, Loader2, Save, X,
 } from "lucide-react";
@@ -114,12 +114,12 @@ export function NuevaTransferencia({
   );
   const cajasSinUbicacion = cajas.filter(c => !ubicacionCaja[c.caja]).length;
 
-  // "Ubicación en bodega" del acta y de la transferencia: cada ubicación con sus cajas.
+  // "Ubicación (carro · estante · bandeja)" del acta y de la transferencia: cada ubicación con sus cajas.
   const ubicacionTexto = useMemo(() => {
     const porUbic = new Map<string, string[]>();
     for (const c of cajas) {
       const u = ubicaciones.find(x => String(x.id) === ubicacionCaja[c.caja]);
-      if (u) porUbic.set(textoBodega(u), [...(porUbic.get(textoBodega(u)) ?? []), c.caja]);
+      if (u) porUbic.set(textoPosicion(u), [...(porUbic.get(textoPosicion(u)) ?? []), c.caja]);
     }
     return [...porUbic].map(([u, cs]) => `${u} (caja${cs.length > 1 ? "s" : ""} ${cs.join(", ")})`).join("; ");
   }, [cajas, ubicaciones, ubicacionCaja]);
