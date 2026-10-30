@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { apiAnularDocumento } from "../../lib/documentosApi";
 import { VisorDocumento, guardarArchivoDescargado, useArchivoDocumento } from "./VisorDocumento";
+import { textoBodega, textoUbicacion, useUbicacionesActivas, type UbicacionBodega } from "./UbicacionFisica";
 
 export type TipoDocumento = "Entrada" | "Salida" | "Interno";
 
@@ -29,6 +30,8 @@ export interface DocumentoDetalle {
   persona: string;
   caja: string;
   carpeta: string;
+  /** Bodega · estante · módulo del catálogo (opcional). */
+  ubicacion?: UbicacionBodega | null;
   archivo: string;
   paginas: number;
   origen: string;
@@ -63,6 +66,8 @@ export function DetalleDocumento({ documento, documentoId, archivoId, textoVolve
   const [doc, setDoc] = useState(documento);
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState({ contraparte: "", persona: "", caja: "", carpeta: "" });
+  const [bodegaId, setBodegaId] = useState("");
+  const ubicaciones = useUbicacionesActivas();
   const [confirmando, setConfirmando] = useState(false);
   const [motivoAnulacion, setMotivoAnulacion] = useState("");
   const [anulando, setAnulando] = useState(false);
@@ -73,11 +78,13 @@ export function DetalleDocumento({ documento, documentoId, archivoId, textoVolve
 
   const editar = () => {
     setBorrador({ contraparte: doc.contraparte, persona: doc.persona, caja: doc.caja, carpeta: doc.carpeta });
+    setBodegaId(doc.ubicacion ? String(doc.ubicacion.id) : "");
     setEditando(true);
   };
   const guardar = () => {
     // TODO: enviar los cambios al backend (y registrar la auditoría).
-    setDoc(d => ({ ...d, ...borrador }));
+    const ubicacion = ubicaciones.find(u => String(u.id) === bodegaId) ?? (bodegaId ? doc.ubicacion : null);
+    setDoc(d => ({ ...d, ...borrador, ubicacion }));
     setEditando(false);
     toast.success("Datos actualizados");
   };
@@ -125,6 +132,14 @@ export function DetalleDocumento({ documento, documentoId, archivoId, textoVolve
     ["Código TRD", doc.trd],
     ["Caja", editable("caja", doc.caja)],
     ["Carpeta", editable("carpeta", doc.carpeta)],
+    ...(editando && ubicaciones.length > 0
+      ? [["Bodega (opcional)", (
+          <select className={input} value={bodegaId} onChange={e => setBodegaId(e.target.value)}>
+            <option value="">Sin asignar</option>
+            {ubicaciones.map(u => <option key={u.id} value={u.id}>{textoBodega(u)}</option>)}
+          </select>
+        )] as [string, React.ReactNode]]
+      : []),
     ["Estado", (
       <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
         anulado ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -133,7 +148,7 @@ export function DetalleDocumento({ documento, documentoId, archivoId, textoVolve
       </span>
     )],
     ["Archivo", `${doc.archivo} · ${doc.paginas} pág.`],
-    ["Ubicación física", `Caja ${doc.caja} · Carpeta ${doc.carpeta}`],
+    ["Ubicación física", textoUbicacion(doc)],
     ["Origen", doc.origen],
   ];
 

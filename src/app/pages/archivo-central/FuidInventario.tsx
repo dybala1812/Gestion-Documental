@@ -181,6 +181,8 @@ interface Props {
   anio: number;
   onFilas: (f: FilaFuid[]) => void;
   onNombreArchivo: (n: string) => void;
+  /** El archivo que se sube queda como acta de entrega de la transferencia (sea o no un FUID). */
+  onArchivo?: (archivo: File) => void;
 }
 
 const celda =
@@ -188,20 +190,25 @@ const celda =
 const btnSec =
   "inline-flex h-9 items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 text-xs font-semibold text-[#1e3a5f] hover:bg-[#f3ede1]";
 
-export function FuidInventario({ filas, nombreArchivo, anio, onFilas, onNombreArchivo }: Props) {
+export function FuidInventario({ filas, nombreArchivo, anio, onFilas, onNombreArchivo, onArchivo }: Props) {
   const inputId = useId();
   const { problemas, correctas, errores, cajas } = resumenFuid(filas, anio);
   const th = "px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-white whitespace-nowrap";
 
+  // Se acepta cualquier archivo: queda como acta de entrega. Si es un Excel con las columnas del FUID,
+  // además se llena el inventario; si no, el inventario se completa a mano en la tabla.
   const cargar = async (archivo: File | undefined) => {
     if (!archivo) return;
-    if (!/\.xlsx?$/i.test(archivo.name)) return toast.error("El inventario debe ser un archivo Excel (.xlsx o .xls)");
+    onArchivo?.(archivo);
+    onNombreArchivo(archivo.name);
     try {
       const leidas = await leerExcel(archivo);
       onFilas(leidas);
-      onNombreArchivo(archivo.name);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo leer el Excel. Revisa que no esté dañado.");
+      toast.success(`Acta de entrega: ${archivo.name}`, { description: `Se leyeron ${leidas.length} fila(s) del inventario.` });
+    } catch {
+      toast.info(`Acta de entrega: ${archivo.name}`, {
+        description: "No se leyeron filas del inventario de este archivo. Agrégalas en la tabla o usa la plantilla FUID.",
+      });
     }
   };
 
@@ -219,14 +226,16 @@ export function FuidInventario({ filas, nombreArchivo, anio, onFilas, onNombreAr
           <FileSpreadsheet className="h-8 w-8 shrink-0 text-[#1e3a5f]" aria-hidden />
           <span className="min-w-0">
             <span className="block truncate text-base font-bold text-[#1e3a5f]">
-              {nombreArchivo || "Arrastra o elige el inventario FUID (Excel)"}
+              {nombreArchivo || "Elige el acta de entrega (FUID)"}
             </span>
             <span className="block text-xs text-[#6b7a8d]">
-              {nombreArchivo ? "Revisa las filas marcadas en rojo. Puedes corregirlas aquí mismo." : ".xlsx o .xls · usa la plantilla para no equivocarte de columnas"}
+              {nombreArchivo
+                ? "Es el acta de entrega. Revisa las filas marcadas en rojo; puedes corregirlas aquí mismo."
+                : "El archivo que entregó la dependencia queda como acta de entrega. Si es un Excel con las columnas del FUID, se llena el inventario."}
             </span>
           </span>
           <input
-            id={inputId} type="file" accept=".xlsx,.xls" className="sr-only"
+            id={inputId} type="file" className="sr-only"
             onChange={e => { cargar(e.target.files?.[0]); e.target.value = ""; }}
           />
         </label>

@@ -37,7 +37,9 @@ export default function LoginTemporal() {
     try {
       await apiLoginTemporal(perfil, clave, perfil === "dependencia" ? Number(dependenciaId) : undefined);
       // Recarga completa: el contexto de autenticación lee la sesión al iniciar.
-      window.location.assign("/archivo-central");
+      // ?redirect= solo acepta rutas internas (p. ej. /movil, la app del celular).
+      const destino = new URLSearchParams(window.location.search).get("redirect") ?? "";
+      window.location.assign(/^\/(?!\/)[\w\-/]*$/.test(destino) ? destino : "/archivo-central");
     } catch (e) {
       setError({ mensaje: e instanceof Error ? e.message : String(e), campo: (e as { campo?: string }).campo });
       setClave("");

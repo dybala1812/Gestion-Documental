@@ -23,6 +23,10 @@ export interface NuevoDocumento {
   fecha?: string;
   caja?: string;
   carpeta?: string;
+  /** Id del catálogo de ubicaciones físicas (opcional). */
+  ubicacion_id?: number;
+  /** "app_movil" si se escaneó con la app del celular (/movil). */
+  origen?: "app_movil";
 }
 
 export async function apiListAsuntos(dependenciaId: number): Promise<AsuntoCat[]> {
@@ -49,6 +53,40 @@ export async function apiCrearDocumento(archivo: File, datos: NuevoDocumento): P
   // Sin Content-Type: el navegador agrega el boundary del multipart. Si sgdFetch fuerza JSON, hay que ajustarlo.
   return sgdFetch<Clasificado>("/documentos", { method: "POST", body: form });
 }
+export interface DatosClasificacion {
+  asunto_id?: number | null;
+  /** "Entrada" | "Salida" | "Interno" */
+  tipo?: string;
+  consecutivo?: string;
+  /** AAAA-MM-DD */
+  fecha?: string | null;
+  anio?: number;
+  remitente?: string;
+  destinatario?: string;
+  caja?: string;
+  carpeta?: string;
+  ubicacion_id?: number | null;
+}
+
+/**
+ * Guarda los datos de un documento y, con `clasificar` (por defecto true), lo clasifica (RF-AC-011):
+ * sale de Por clasificar y queda en Clasificados y en el Archivo. Con `clasificar: false` solo guarda.
+ * `estado` es el estado en que quedó ("clasificado" si ya tiene asunto y fecha).
+ */
+export async function apiClasificarDocumento(
+  documentoId: number, datos: DatosClasificacion, clasificar = true,
+): Promise<{ ok: boolean; estado: string }> {
+  return sgdFetch<{ ok: boolean; estado: string }>(`/documentos/${documentoId}/clasificar`, {
+    method: "POST",
+    body: JSON.stringify({ ...datos, clasificar }),
+  });
+}
+
+/** Los últimos 10 documentos cargados desde la app del celular (para confirmar que llegaron). */
+export async function apiUltimosMovil(): Promise<Clasificado[]> {
+  return sgdFetch<Clasificado[]>("/documentos/movil");
+}
+
 /** Anula un documento (RF-AC-024): no se borra, queda "anulado" con motivo y auditado. */
 export async function apiAnularDocumento(documentoId: number, motivo: string): Promise<{ ok: boolean }> {
   return sgdFetch<{ ok: boolean }>(`/documentos/${documentoId}/anular`, {

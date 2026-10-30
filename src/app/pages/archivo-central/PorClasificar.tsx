@@ -2,7 +2,7 @@
  * @file PorClasificar.tsx
  * @description Archivo Central › Bandejas › Por clasificar (Ingreso · Bandeja 1).
  * Datos reales: GET /api/documentos?estado=por_clasificar.
- * OJO: guardar la clasificación desde ClasificarDocumento aún no se persiste (siguiente etapa).
+ * Al clasificar (ClasificarDocumento → POST /api/documentos/{id}/clasificar) el documento sale de esta bandeja.
  */
 import { useEffect, useState } from "react";
 import { FileText, Inbox, Loader2, Play, RefreshCw, Upload } from "lucide-react";
@@ -42,6 +42,11 @@ export function PorClasificar({ onCargarLote }: { onCargarLote?: () => void }) {
           fechaCarga: d.cargado_en ? formatoFecha(d.cargado_en.slice(0, 10)) : "—",
           paginas: d.paginas ?? 1,
           archivoId: d.archivo_id,
+          dependenciaId: d.dependencia_id,
+          previo: {
+            tipo: d.tipo, consecutivo: d.consecutivo, fecha: d.fecha,
+            caja: d.caja, carpeta: d.carpeta, ubicacionId: d.ubicacion?.id ?? null,
+          },
         })));
       })
       .catch(e => { if (!cancelado) setError(e instanceof Error ? e.message : "No se pudieron cargar los documentos"); })

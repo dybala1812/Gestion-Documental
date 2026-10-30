@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { alertaCarga, motivoError, plural } from "../../lib/alertasCarga";
 import { apiListDependenciasCom, type DependenciaCom } from "../../lib/comunicacionesApi";
 import { apiCrearDocumento, apiListAsuntos, type AsuntoCat } from "../../lib/documentosApi";
+import { textoUbicacion, UBICACION_VACIA, UbicacionCampos, useUbicacionesActivas, type ValorUbicacion } from "./UbicacionFisica";
 import {
   AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, FileInput, FileText,
   Info, Loader2, UploadCloud, X, XCircle,
@@ -30,11 +31,11 @@ const PASOS = [
 
 interface Datos {
   dependencia: string; anio: string; asunto: string; tipo: string;
-  consecutivo: string; fecha: string; caja: string; carpeta: string;
+  consecutivo: string; fecha: string; ubicacion: ValorUbicacion;
 }
 const DATOS_INICIALES: Datos = {
   dependencia: "", anio: String(ANIO_ACTUAL), asunto: "", tipo: "Entrada",
-  consecutivo: "", fecha: "", caja: "", carpeta: "",
+  consecutivo: "", fecha: "", ubicacion: UBICACION_VACIA,
 };
 
 type Nivel = "verde" | "amarillo" | "rojo";
@@ -91,6 +92,7 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
   const [creando, setCreando] = useState(false);
   const [dependencias, setDependencias] = useState<DependenciaCom[]>([]);
   const [asuntos, setAsuntos] = useState<AsuntoCat[]>([]);
+  const ubicaciones = useUbicacionesActivas();
 
   useEffect(() => {
     apiListDependenciasCom().then(setDependencias).catch(e => alertaCarga.error("No se pudieron cargar las dependencias", motivoError(e, "Revisa la conexión con el servidor e intenta de nuevo.")));
@@ -156,8 +158,9 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
             tipo: datos.tipo,
             consecutivo: datos.consecutivo.trim() || undefined,
             fecha: datos.fecha || undefined,
-            caja: datos.caja.trim() || undefined,
-            carpeta: datos.carpeta.trim() || undefined,
+            caja: datos.ubicacion.caja.trim() || undefined,
+            carpeta: datos.ubicacion.carpeta.trim() || undefined,
+            ubicacion_id: datos.ubicacion.ubicacion_id ? Number(datos.ubicacion.ubicacion_id) : undefined,
           });
           guardados++;
         } catch (e) {
@@ -272,12 +275,11 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
               <Campo label="Fecha">
                 <input type="date" className={campo} value={datos.fecha} onChange={set("fecha")} />
               </Campo>
-              <Campo label="Caja">
-                <input className={campo} placeholder="Ej. 41" value={datos.caja} onChange={set("caja")} />
-              </Campo>
-              <Campo label="Carpeta">
-                <input className={campo} placeholder="Ej. 2" value={datos.carpeta} onChange={set("carpeta")} />
-              </Campo>
+              <UbicacionCampos
+                valor={datos.ubicacion}
+                onChange={ubicacion => setDatos(d => ({ ...d, ubicacion }))}
+                ubicaciones={ubicaciones}
+              />
             </div>
             <p className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
@@ -358,7 +360,10 @@ export function NuevaCargaDocumento({ onVolver }: { onVolver: () => void }) {
                 ["Dependencia", nombreDependencia], ["Año", datos.anio],
                 ["Asunto", nombreAsunto || "Sin asunto · por clasificar"], ["Tipo", datos.tipo],
                 ["Consecutivo", datos.consecutivo || "—"], ["Fecha", datos.fecha || "—"],
-                ["Caja", datos.caja || "—"], ["Carpeta", datos.carpeta || "—"],
+                ["Ubicación física", textoUbicacion({
+                  ...datos.ubicacion,
+                  ubicacion: ubicaciones.find(u => String(u.id) === datos.ubicacion.ubicacion_id),
+                })],
               ] as const).map(([k, v]) => (
                 <div key={k}>
                   <dt className="text-[11px] font-bold uppercase tracking-wide text-[#6b7a8d]">{k}</dt>

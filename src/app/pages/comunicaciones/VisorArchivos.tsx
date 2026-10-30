@@ -315,6 +315,37 @@ function VistaTexto({ blob, alto }: { blob: Blob; alto: string }) {
   );
 }
 
+/**
+ * Vista previa de un archivo que ya está en el navegador (p. ej. el que se acaba de elegir, antes de subirlo).
+ * Usa las mismas vistas que el visor: PDF, imagen, Word, Excel (una pestaña por hoja) o texto.
+ */
+export function VistaPreviaArchivo({ archivo, alto = "h-[28rem]" }: { archivo: File; alto?: string }) {
+  const vista = tipoVista(archivo.type, archivo.name);
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (vista !== "imagen") return;
+    const u = URL.createObjectURL(archivo);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [archivo, vista]);
+  return (
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      {vista === "pdf" && <VistaPdf blob={archivo} alto={alto} />}
+      {vista === "imagen" && url && <VistaImagen url={url} nombre={archivo.name} alto={alto} />}
+      {vista === "docx" && <VistaDocx blob={archivo} alto={alto} />}
+      {vista === "excel" && <VistaExcel blob={archivo} alto={alto} />}
+      {vista === "texto" && <VistaTexto blob={archivo} alto={alto} />}
+      {vista === "otro" && (
+        <div className={`flex flex-col items-center justify-center px-6 text-center bg-gray-50 ${alto}`}>
+          <Paperclip className="w-10 h-10 text-gray-300" />
+          <p className="mt-2 text-sm font-medium text-gray-700">{archivo.name}</p>
+          <p className="mt-1 max-w-sm text-xs text-gray-500">Este formato no tiene vista previa en el navegador. Se guarda igual como acta.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Visor principal ─────────────────────────────────────────────────────────
 
 export function VisorArchivos({ adjuntos }: { adjuntos: AdjuntoCom[] }) {

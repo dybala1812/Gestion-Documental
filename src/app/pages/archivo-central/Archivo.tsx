@@ -49,6 +49,7 @@ function detalleDe(x: ResultadoBusqueda): DocumentoDetalle {
     persona: "—",
     caja: x.caja ?? "—",
     carpeta: x.carpeta ?? "—",
+    ubicacion: x.ubicacion ?? null,
     archivo: x.titulo,
     paginas: 1,
     origen: "—",
@@ -130,11 +131,8 @@ export function Archivo({ onCargarLote }: { onCargarLote?: () => void }) {
     apiArbolArchivo()
       .then((a) => {
         if (!vigente) return;
+        // Al entrar, todas las carpetas quedan cerradas: el usuario abre la que necesita.
         setArbol(a);
-        // Primera vez: se abre la primera dependencia con documentos.
-        const primera = a.find((d) => d.total > 0) ?? a[0];
-        setSel((s) => (s.depId ? s : { depId: primera?.dependencia_id }));
-        setAbiertos((prev) => (prev.size || !primera ? prev : new Set([String(primera.dependencia_id)])));
       })
       .catch((e) => { if (vigente) setErrorArbol(formatApiError(e)); });
     return () => { vigente = false; };

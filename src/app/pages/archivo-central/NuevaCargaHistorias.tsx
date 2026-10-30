@@ -131,8 +131,10 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
 
   const agregar = (lista: FileList | File[] | null) => {
     if (!lista) return;
+    // Se copia ya: el FileList del input se vacía al limpiar su valor, antes de que React ejecute el setState.
+    const recibidos = Array.from(lista);
     setArchivos(prev => {
-      const nuevos = Array.from(lista).filter(f => !prev.some(p => p.name === f.name && p.size === f.size));
+      const nuevos = recibidos.filter(f => !prev.some(p => p.name === f.name && p.size === f.size));
       return [...prev, ...nuevos];
     });
   };
