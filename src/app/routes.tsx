@@ -1,7 +1,8 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate } from "react-router";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
+import { LOGIN_TEMPORAL } from "./lib/config"; // ⚠️ TEMPORAL
 import { Layout } from "./components/layout/Layout";
 import { Home } from "./pages/Home";
 import { NovaLanding } from "./pages/NovaLanding";
@@ -50,6 +51,7 @@ import { GestionSolicitudesRol } from "./pages/admin/GestionSolicitudesRol";
 import { QuizCentral } from "./pages/integrations/QuizCentral";
 import { ConvocatoriasCentral } from "./pages/integrations/ConvocatoriasCentral";
 import { EleccionesPanel } from "./components/elecciones/EleccionesPanel";
+import { ArchivoCentralArea } from "./pages/archivo-central/ArchivoCentralArea";
 // import { TIInventarioAreas } from "./pages/inventario/TIInventarioAreas";
 
 // ── Spinner compartido ────────────────────────────────────────────────────────
@@ -164,6 +166,34 @@ function EleccionesRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// ── Guardia para el módulo Archivo Central (SGD) ─────────────────────────────
+/**
+ * Acceso al módulo superior Archivo Central. Por el momento solo expone
+ * Comunicaciones, pero aquí se centralizarán documentos, transferencias,
+ * historias académicas e histórico. Permite admin, funcionarios de área y
+ * perfiles institucionales vinculados al SGD.
+ */
+function ArchivoCentralRoute({ children }: { children: React.ReactNode }) {
+  const { usuario, loading } = useAuth();
+  if (loading) return <AuthSpinner />;
+  if (!usuario) return <Navigate to={LOGIN_TEMPORAL ? "/login-temporal" : "/login?redirect=/archivo-central"} replace />;
+
+  const roles = (usuario.roles ?? []).map((r) => String(r).trim().toUpperCase());
+  const tieneAcceso =
+    usuario.is_staff ||
+    usuario.rol === "admin" ||
+    usuario.rol === "area" ||
+    roles.includes("ADMIN") ||
+    roles.includes("ARCHIVO_CENTRAL") ||
+    roles.includes("REGISTRO_CONTROL") ||
+    roles.includes("SECRETARIA_GENERAL");
+
+  if (!tieneAcceso) {
+    return <Navigate to={usuario.rol === "area" ? "/area" : "/dashboard"} replace />;
+  }
+  return <>{children}</>;
+}
+
 function DashboardGuard() {
   const { usuario, loading } = useAuth();
 
@@ -230,7 +260,17 @@ function CampusLookupGuard() {
   return <CampusStudentLookup />;
 }
 
+// ⚠️ TEMPORAL (ver la ruta "login-temporal").
+const LoginTemporal = LOGIN_TEMPORAL ? lazy(() => import("./pages/login-temporal/LoginTemporal")) : null;
+
+// Archivo Central · app del celular (PWA, RF-AC-022). Fuera del Layout: pantalla completa en el celular.
+const AppMovil = lazy(() => import("./pages/archivo-central/movil/AppMovil"));
+
 export const router = createBrowserRouter([
+  {
+    path: "/movil",
+    element: <Suspense fallback={<AuthSpinner />}><AppMovil /></Suspense>,
+  },
   {
     path: "/",
     Component: Layout,
@@ -439,6 +479,19 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      {
+        path: "archivo-central",
+        element: (
+          <ArchivoCentralRoute>
+            <ArchivoCentralArea />
+          </ArchivoCentralRoute>
+        ),
+      },
+      // ⚠️ TEMPORAL — login de pruebas por perfil. Fuera de `npm run dev` con VITE_LOGIN_TEMPORAL=true
+      // la ruta no existe y su código no entra al build. Borrar antes del despliegue.
+      ...(LoginTemporal
+        ? [{ path: "login-temporal", element: <Suspense fallback={<AuthSpinner />}><LoginTemporal /></Suspense> }]
+        : []),
       {
         path: "area",
         element: (
