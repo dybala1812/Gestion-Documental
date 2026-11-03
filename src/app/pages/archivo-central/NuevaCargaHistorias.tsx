@@ -8,7 +8,9 @@
 import { useEffect, useState } from "react";
 import { alertaCarga, plural } from "../../lib/alertasCarga";
 import { listarCatalogo } from "../../lib/catalogosApi";
-import { apiCargarHistoria, type EstadoHistoria } from "../../lib/historiasApi";
+import {
+  apiCargarHistoria, leerNombreArchivo, nivelesDeProgramas, programasDelNivel, type EstadoHistoria, type ProgramaHist,
+} from "../../lib/historiasApi";
 import { ArrowLeft, ArrowRight, Check, FileText, FolderUp, GraduationCap, Info, Loader2, UploadCloud, Wand2, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { tamanoLegible, type ArchivoLote, type LoteData } from "./LoteDetalle";
@@ -18,13 +20,11 @@ const ESTADOS = ["Graduados", "Retirados", "Activos"];
 const ESTADO_DB: Record<string, EstadoHistoria> = { Graduados: "graduado", Retirados: "retirado", Activos: "activa" };
 
 /** Programa del catálogo (Catálogos › Programas académicos); su nivel sale de Catálogos › Niveles. */
-interface NivelRef { id: number; nombre: string; tipo: string }
-interface ProgramaCat { id: number; nombre: string; nivel_id?: number | null; nivel_ref?: NivelRef | null }
+type ProgramaCat = ProgramaHist;
 const ANIO_ACTUAL = new Date().getFullYear();
 const ANIOS = Array.from({ length: ANIO_ACTUAL - 1989 }, (_, i) => ANIO_ACTUAL - i);
 const MAX_MB = 50;
 const EXT_OK = /\.(pdf|jpe?g|png|tiff?)$/i;
-const CONVENCION = /^(.+?)\s+-\s+(\d{5,12})(?:\s*\(\d+\))?\.(pdf|jpe?g|png|tiff?)$/i;
 
 const PASOS = [
   { titulo: "Destino y datos", detalle: "Estado, año, nivel, programa" },
@@ -40,7 +40,7 @@ const SUBTITULO = [
   "confirma y se crea el lote.",
 ];
 
-/** nivel = id del nivel (Catálogos › Niveles); programa = id del programa. */
+/** nivel = clave del nivel (ver nivelesDeProgramas); programa = id del programa. */
 interface Datos { estado: string; anio: string; nivel: string; programa: string; titulo: string }
 type Nivel = "verde" | "amarillo" | "rojo";
 interface Resultado {
@@ -56,15 +56,7 @@ async function sha256(archivo: File): Promise<string> {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** "GÓMEZ RIASCOS ANA LUCÍA - 1061998877.pdf" → { nombre, apellidos, nombres, cedula } o null si no cumple la convención.
- *  Apellidos: las dos primeras palabras (una si el nombre solo tiene dos); nombres: el resto. */
-function leerNombre(nombreArchivo: string) {
-  const m = nombreArchivo.match(CONVENCION);
-  if (!m || !/^[\p{L}'. ]+$/u.test(m[1]) || m[1].trim().split(/\s+/).length < 2) return null;
-  const palabras = m[1].trim().split(/\s+/);
-  const corte = palabras.length >= 3 ? 2 : 1;
-  return { nombre: m[1].trim(), apellidos: palabras.slice(0, corte).join(" "), nombres: palabras.slice(corte).join(" "), cedula: m[2] };
-}
+const leerNombre = leerNombreArchivo;
 
 async function evaluar(archivos: File[], titulo: string): Promise<Resultado[]> {
   const vistas = new Map<string, string>(); // huella → primer archivo con esa huella
@@ -147,11 +139,9 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
       .catch(() => setProgramas([]));
   }, []);
   // Niveles: los de Catálogos › Niveles que tienen programas activos (Pregrado, Técnico, Posgrado).
-  const ORDEN_TIPO: Record<string, number> = { pregrado: 1, tecnico: 2, posgrado: 3 };
-  const niveles = [...new Map((programas ?? []).filter(p => p.nivel_ref).map(p => [p.nivel_ref!.id, p.nivel_ref!])).values()]
-    .sort((a, b) => (ORDEN_TIPO[a.tipo] ?? 9) - (ORDEN_TIPO[b.tipo] ?? 9) || a.nombre.localeCompare(b.nombre, "es"));
-  const nivelSel = niveles.find(n => String(n.id) === datos.nivel);
-  const delNivel = (nivel: string) => (programas ?? []).filter(p => String(p.nivel_id ?? "") === nivel);
+  const niveles = nivelesDeProgramas(programas ?? []);
+  const nivelSel = niveles.find(n => n.clave === datos.nivel);
+  const delNivel = (nivel: string) => programasDelNivel(programas ?? [], nivel);
   const programaSel = (programas ?? []).find(p => String(p.id) === datos.programa);
 
   const set = (k: keyof Datos) => (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => setDatos(d => ({ ...d, [k]: e.target.value }));
@@ -290,7 +280,7 @@ export function NuevaCargaHistorias({ onVolver, onIniciar }: Props) {
             <Campo label="Nivel">
               <select className={campo} value={datos.nivel} onChange={e => setDatos(d => ({ ...d, nivel: e.target.value, programa: "" }))}>
                 <option value="">{programas === null ? "Cargando…" : niveles.length === 0 ? "Sin programas en el catálogo" : "Selecciona…"}</option>
-                {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
+                {niveles.map(n => <option key={n.clave} value={n.clave}>{n.nombre}</option>)}
               </select>
             </Campo>
             <Campo label={nivelSel?.tipo === "posgrado" ? "Especialización / programa de posgrado" : "Programa"}>
