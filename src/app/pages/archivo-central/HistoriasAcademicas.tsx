@@ -5,7 +5,7 @@
  * estudiantes del nodo (o de la búsqueda por nombre, cédula o título de un documento), 20 por página.
  * Al abrir una historia se ven sus documentos con el visor. Los datos vienen del backend
  * (GET /api/historias/arbol, /api/historias, /api/historias/{id}/documentos), que aplica la custodia:
- * Registro Académico solo ve las activas (RN-AC-06). Sin IA (RN-AC-13).
+ * Archivo Central, Registro Académico y Secretaría General ven todas (D-27); la custodia sigue RN-AC-06. Sin IA (RN-AC-13).
  */
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -187,7 +187,7 @@ export function HistoriasAcademicas({ onCargar }: { onCargar?: () => void }) {
           <h2 className="flex items-center gap-2 text-xl font-bold text-[#1e3a5f]">
             <GraduationCap className="h-6 w-6 text-[#e8740e]" /> Historias académicas
           </h2>
-          <p className="mt-0.5 text-sm text-[#6b7a8d]">Estado → Año → Nivel → Programa. Registro Académico custodia las activas; Archivo Central, retirados y graduados.</p>
+          <p className="mt-0.5 text-sm text-[#6b7a8d]">Estado → Año → Nivel → Programa. Custodia: Registro Académico las activas; Archivo Central las de retirados y graduados.</p>
         </div>
         <div className="flex gap-2">
           <button onClick={cargarArbol}
