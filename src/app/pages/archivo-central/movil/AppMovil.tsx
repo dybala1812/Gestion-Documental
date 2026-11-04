@@ -5,8 +5,10 @@
  *  - Sesión: la de NOVA (sin sesión, va a /login?redirect=/movil).
  *  - Dos modos, con el mismo destino (Estado → Año → Nivel → Programa) y el título del documento:
  *      · Individual: fotos de las páginas (se unen en un PDF) + apellidos, nombres y cédula del estudiante.
- *      · Masiva: varios archivos nombrados "APELLIDOS NOMBRES - cédula.pdf" (como la carga D de la web);
- *        se suben uno a uno y cada uno muestra su resultado (los errores de uno no detienen a los demás).
+ *      · Masiva: una foto o archivo por estudiante, desde la cámara, la galería o archivos nombrados
+ *        "APELLIDOS NOMBRES - cédula.pdf" (como la carga D de la web). Si el nombre no trae los datos
+ *        (p. ej. una foto de la cámara), se escriben debajo del archivo. Se suben uno a uno y cada uno
+ *        muestra su resultado (los errores de uno no detienen a los demás).
  *  - Cada archivo va a POST /api/historias (permiso cargas.historias); el mismo archivo en la misma
  *    historia no se guarda dos veces. Sin IA (RN-AC-13). Ver y buscar las historias se hace en la web.
  *  - Si se pierde la conexión, avisa y deja reintentar sin perder lo escrito.
@@ -28,6 +30,8 @@ import { usePwaMovil } from "./pwa";
 const ANIO_ACTUAL = new Date().getFullYear();
 const ANIOS = Array.from({ length: ANIO_ACTUAL - 1959 }, (_, i) => ANIO_ACTUAL - i);
 const MAX_MB = 50;
+/** Las fotos se reducen antes de subir (fotoReducida): se aceptan más grandes que un PDF. */
+const MAX_MB_FOTO = 40;
 const EXT_OK = /\.(pdf|jpe?g|png|tiff?)$/i;
 /** Lado mayor de cada foto en el PDF (suficiente para leer un documento y liviano para subir por datos). */
 const LADO_MAX = 1800;
@@ -40,11 +44,23 @@ const DESTINO_INICIAL: Destino = { estado: "graduado", anio: String(ANIO_ACTUAL)
 interface Estudiante { apellidos: string; nombres: string; cedula: string }
 const ESTUDIANTE_VACIO: Estudiante = { apellidos: "", nombres: "", cedula: "" };
 
-type EstadoArchivo = "listo" | "subiendo" | "ok" | "duplicado" | "error" | "invalido";
-interface ArchivoMasivo { archivo: File; estudiante: Estudiante | null; estado: EstadoArchivo; mensaje: string }
+type EstadoArchivo = "sin_datos" | "listo" | "subiendo" | "ok" | "duplicado" | "error" | "invalido";
+interface ArchivoMasivo {
+  id: number;
+  archivo: File;
+  estudiante: Estudiante | null;
+  /** Datos que se escriben a mano cuando el nombre del archivo no los trae. */
+  borrador?: Estudiante;
+  /** Miniatura de la foto (URL temporal; se libera al quitarla). */
+  vista?: string;
+  estado: EstadoArchivo;
+  mensaje: string;
+}
 
 interface Subido { id: string; titulo: string; estudiante: string; programa: string; cuando: Date; nueva: boolean }
 
+const campoChico =
+  "h-10 w-full rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-2.5 text-sm text-[#2c3e50] placeholder:text-[#6b7a8d]/70 focus:border-[#e8740e] focus:outline-none focus:ring-2 focus:ring-[#e8740e]/30 disabled:bg-[#f3ede1]/60";
 const campo =
   "h-12 w-full rounded-xl border border-[rgba(30,58,95,0.15)] bg-white px-3 text-base text-[#2c3e50] placeholder:text-[#6b7a8d]/70 focus:border-[#e8740e] focus:outline-none focus:ring-2 focus:ring-[#e8740e]/30 disabled:bg-[#f3ede1]/60";
 
@@ -73,6 +89,12 @@ const tamano = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1
 const esErrorDeRed = (e: unknown) =>
   e instanceof TypeError || !navigator.onLine || /failed to fetch|network/i.test(e instanceof Error ? e.message : String(e));
 const esDuplicado = (e: unknown) => /duplicad|ya est/i.test(e instanceof Error ? e.message : String(e));
+const esFoto = (f: File) => /^image\//.test(f.type) || /\.(jpe?g|png|tiff?)$/i.test(f.name);
+/** Datos del estudiante completos y con cédula de 5 a 12 dígitos; si no, null. */
+const estudianteValido = (e: Estudiante): Estudiante | null =>
+  e.apellidos.trim() && e.nombres.trim() && /^\d{5,12}$/.test(e.cedula)
+    ? { apellidos: e.apellidos.trim().toUpperCase(), nombres: e.nombres.trim().toUpperCase(), cedula: e.cedula }
+    : null;
 
 /** Lee una foto y la devuelve reducida como JPEG (data URL) con su tamaño. */
 async function fotoReducida(archivo: File): Promise<{ data: string; ancho: number; alto: number }> {
@@ -125,6 +147,7 @@ function Aviso({ aviso }: { aviso: { tipo: "ok" | "error" | "red"; texto: string
 }
 
 const ESTILO_ARCHIVO: Record<EstadoArchivo, { texto: string; clase: string }> = {
+  sin_datos: { texto: "Faltan datos", clase: "bg-amber-100 text-amber-700" },
   listo: { texto: "Listo", clase: "bg-slate-100 text-slate-600" },
   subiendo: { texto: "Subiendo…", clase: "bg-blue-50 text-blue-700" },
   ok: { texto: "Subido", clase: "bg-emerald-100 text-emerald-700" },
@@ -151,6 +174,12 @@ export default function AppMovil() {
   const camara = useRef<HTMLInputElement>(null);
   const galeria = useRef<HTMLInputElement>(null);
   const masivos = useRef<HTMLInputElement>(null);
+  const camaraMasiva = useRef<HTMLInputElement>(null);
+  const siguienteId = useRef(0);
+  const vistas = useRef<string[]>([]);
+
+  // Libera las miniaturas de las fotos al salir de la pantalla.
+  useEffect(() => () => vistas.current.forEach(u => URL.revokeObjectURL(u)), []);
 
   // Sin sesión → al login de NOVA y de vuelta aquí.
   useEffect(() => {
@@ -258,17 +287,44 @@ export default function AppMovil() {
     const recibidos = Array.from(lista);
     setLote(prev => {
       const nuevos = recibidos
-        .filter(f => !prev.some(p => p.archivo.name === f.name && p.archivo.size === f.size))
+        .filter(f => !prev.some(p => p.archivo.name === f.name && p.archivo.size === f.size && p.archivo.lastModified === f.lastModified))
         .map((f): ArchivoMasivo => {
-          if (!EXT_OK.test(f.name)) return { archivo: f, estudiante: null, estado: "invalido", mensaje: "Formato no permitido: usa PDF o foto." };
-          if (f.size === 0 || f.size > MAX_MB * 1024 * 1024) return { archivo: f, estudiante: null, estado: "invalido", mensaje: `Vacío o de más de ${MAX_MB} MB.` };
+          const base = { id: ++siguienteId.current, archivo: f, estudiante: null };
+          const foto = esFoto(f);
+          if (!EXT_OK.test(f.name) && !foto && f.type !== "application/pdf")
+            return { ...base, estado: "invalido", mensaje: "Formato no permitido: usa PDF o foto." };
+          const limite = foto ? MAX_MB_FOTO : MAX_MB;
+          if (f.size === 0 || f.size > limite * 1024 * 1024)
+            return { ...base, estado: "invalido", mensaje: `Vacío o de más de ${limite} MB.` };
+          let vista: string | undefined;
+          if (foto) {
+            vista = URL.createObjectURL(f);
+            vistas.current.push(vista);
+          }
           const est = leerNombreArchivo(f.name);
-          if (!est) return { archivo: f, estudiante: null, estado: "invalido", mensaje: "El nombre debe ser APELLIDOS NOMBRES - cédula.pdf" };
-          return { archivo: f, estudiante: { apellidos: est.apellidos, nombres: est.nombres, cedula: est.cedula }, estado: "listo", mensaje: "" };
+          if (!est) return { ...base, vista, borrador: ESTUDIANTE_VACIO, estado: "sin_datos", mensaje: "Escribe los datos del estudiante." };
+          return { ...base, vista, estudiante: { apellidos: est.apellidos, nombres: est.nombres, cedula: est.cedula }, estado: "listo", mensaje: "" };
         });
-      return [...prev, ...nuevos].sort((a, b) => a.archivo.name.localeCompare(b.archivo.name, "es"));
+      // Primero los que piden datos (en el orden en que se tomaron); luego los nombrados, por nombre.
+      return [...prev, ...nuevos].sort((a, b) =>
+        (a.estado === "sin_datos" ? 0 : 1) - (b.estado === "sin_datos" ? 0 : 1)
+        || (a.estado === "sin_datos" ? a.id - b.id : a.archivo.name.localeCompare(b.archivo.name, "es")));
     });
     setAviso(null);
+  };
+
+  /** Datos escritos a mano: el archivo queda listo cuando están completos. */
+  const editarDatos = (id: number, k: keyof Estudiante, valor: string) =>
+    setLote(l => l.map(a => {
+      if (a.id !== id || !a.borrador) return a;
+      const borrador = { ...a.borrador, [k]: k === "cedula" ? valor.replace(/\D/g, "") : valor };
+      const est = estudianteValido(borrador);
+      return { ...a, borrador, estudiante: est, estado: est ? "listo" : "sin_datos", mensaje: est ? "" : "Escribe los datos del estudiante." };
+    }));
+
+  const quitarDelLote = (a: ArchivoMasivo) => {
+    if (a.vista) URL.revokeObjectURL(a.vista);
+    setLote(l => l.filter(x => x.id !== a.id));
   };
 
   const pendientes = lote.filter(a => a.estado === "listo" || a.estado === "error");
@@ -284,7 +340,13 @@ export default function AppMovil() {
     for (const item of pendientes) {
       setLote(l => l.map(a => (a.archivo === item.archivo ? { ...a, estado: "subiendo", mensaje: "" } : a)));
       try {
-        const h = await apiCargarHistoria(item.archivo, {
+        const est = item.estudiante!;
+        // Una foto se sube como PDF reducido (igual que en Individual); un PDF va tal cual.
+        const archivo = esFoto(item.archivo)
+          ? await armarPdf([item.archivo], `${est.apellidos} ${est.nombres} - ${est.cedula}`)
+          : item.archivo;
+        if (archivo.size > MAX_MB * 1024 * 1024) throw new Error(`Queda de más de ${MAX_MB} MB.`);
+        const h = await apiCargarHistoria(archivo, {
           ...base, apellidos: item.estudiante!.apellidos, nombres: item.estudiante!.nombres, numero_documento: item.estudiante!.cedula,
         });
         ok++;
@@ -455,12 +517,22 @@ export default function AppMovil() {
             <section className="rounded-2xl bg-white p-4 shadow-sm">
               <h2 className="mb-1 text-sm font-bold uppercase tracking-wide text-[#6b7a8d]">2 · Archivos</h2>
               <p className="mb-3 text-xs text-[#6b7a8d]">
-                Un archivo por estudiante, nombrado <strong>APELLIDOS NOMBRES - cédula.pdf</strong> (también fotos). De ahí se toman el nombre y la cédula.
+                Una foto o un archivo por estudiante. Si el archivo se llama <strong>APELLIDOS NOMBRES - cédula.pdf</strong>,
+                los datos se toman del nombre; si no (por ejemplo, una foto), los escribes debajo. Para varias páginas usa Individual.
               </p>
-              <button type="button" onClick={() => masivos.current?.click()} disabled={procesando}
-                className="flex h-16 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#1e3a5f] text-sm font-bold text-[#1e3a5f] active:bg-[#f3ede1] disabled:opacity-60">
-                <FolderUp className="h-5 w-5" /> Elegir archivos
-              </button>
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => camaraMasiva.current?.click()} disabled={procesando}
+                  className="flex h-20 flex-col items-center justify-center gap-1 rounded-xl bg-[#1e3a5f] text-sm font-bold text-white active:opacity-80 disabled:opacity-60">
+                  <Camera className="h-6 w-6" /> Tomar foto
+                </button>
+                <button type="button" onClick={() => masivos.current?.click()} disabled={procesando}
+                  className="flex h-20 flex-col items-center justify-center gap-1 rounded-xl border-2 border-[#1e3a5f] text-sm font-bold text-[#1e3a5f] active:bg-[#f3ede1] disabled:opacity-60">
+                  <ImagePlus className="h-6 w-6" /> Galería o archivos
+                </button>
+              </div>
+              {/* capture="environment": abre la cámara trasera; cada foto es el documento de un estudiante. */}
+              <input ref={camaraMasiva} type="file" accept="image/*" capture="environment" className="sr-only"
+                onChange={e => { agregarMasivos(e.target.files); e.target.value = ""; }} />
               <input ref={masivos} type="file" accept="application/pdf,image/*" multiple className="sr-only"
                 onChange={e => { agregarMasivos(e.target.files); e.target.value = ""; }} />
 
@@ -469,33 +541,49 @@ export default function AppMovil() {
                   <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-[#6b7a8d]">
                     <span>{lote.length} archivo{lote.length === 1 ? "" : "s"}</span>
                     {cuenta("ok") > 0 && <span className="text-emerald-700">{cuenta("ok")} subidos</span>}
+                    {cuenta("sin_datos") > 0 && <span className="text-amber-700">{cuenta("sin_datos")} sin datos</span>}
                     {cuenta("duplicado") > 0 && <span className="text-amber-700">{cuenta("duplicado")} ya estaban</span>}
                     {cuenta("error") + cuenta("invalido") > 0 && <span className="text-red-700">{cuenta("error") + cuenta("invalido")} con problema</span>}
                   </p>
                   <ul className="mt-2 divide-y divide-[rgba(30,58,95,0.09)] rounded-xl border border-[rgba(30,58,95,0.09)]">
                     {lote.map(a => (
-                      <li key={`${a.archivo.name}-${a.archivo.size}`} className="flex items-start gap-3 px-3 py-2.5">
-                        {a.estado === "invalido" || a.estado === "error"
-                          ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
-                          : a.estado === "subiendo" ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-700" />
-                          : <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[#1e3a5f]" />}
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-[#2c3e50]">
-                            {a.estudiante ? `${a.estudiante.apellidos} ${a.estudiante.nombres}` : a.archivo.name}
+                      <li key={a.id} className="px-3 py-2.5">
+                        <div className="flex items-start gap-3">
+                          {a.vista ? (
+                            <img src={a.vista} alt="" className="h-12 w-12 shrink-0 rounded-lg border border-[rgba(30,58,95,0.12)] object-cover" />
+                          ) : a.estado === "invalido" || a.estado === "error"
+                            ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                            : a.estado === "subiendo" ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-700" />
+                            : <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[#1e3a5f]" />}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-[#2c3e50]">
+                              {a.estudiante ? `${a.estudiante.apellidos} ${a.estudiante.nombres}` : esFoto(a.archivo) ? "Foto" : a.archivo.name}
+                            </span>
+                            <span className="block truncate text-xs text-[#6b7a8d]">
+                              {a.estudiante ? `C.C. ${a.estudiante.cedula} · ` : ""}{a.mensaje || tamano(a.archivo.size)}
+                            </span>
                           </span>
-                          <span className="block truncate text-xs text-[#6b7a8d]">
-                            {a.estudiante ? `C.C. ${a.estudiante.cedula} · ` : ""}{a.mensaje || tamano(a.archivo.size)}
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${ESTILO_ARCHIVO[a.estado].clase}`}>
+                            {a.estado === "subiendo" && a.vista ? "Subiendo…" : ESTILO_ARCHIVO[a.estado].texto}
                           </span>
-                        </span>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${ESTILO_ARCHIVO[a.estado].clase}`}>
-                          {ESTILO_ARCHIVO[a.estado].texto}
-                        </span>
-                        {!procesando && (a.estado === "listo" || a.estado === "invalido" || a.estado === "error") && (
-                          <button type="button" aria-label={`Quitar ${a.archivo.name}`}
-                            onClick={() => setLote(l => l.filter(x => x !== a))}
-                            className="rounded-lg p-1.5 text-[#6b7a8d] active:bg-red-50 active:text-red-600">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {!procesando && (a.estado === "listo" || a.estado === "sin_datos" || a.estado === "invalido" || a.estado === "error") && (
+                            <button type="button" aria-label={`Quitar ${a.estudiante ? `${a.estudiante.apellidos} ${a.estudiante.nombres}` : a.archivo.name}`}
+                              onClick={() => quitarDelLote(a)}
+                              className="rounded-lg p-1.5 text-[#6b7a8d] active:bg-red-50 active:text-red-600">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                        {/* Datos a mano: solo para lo que no trae el nombre del estudiante y aún no se subió. */}
+                        {a.borrador && (a.estado === "sin_datos" || a.estado === "listo" || a.estado === "error") && (
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <input className={campoChico} autoCapitalize="characters" placeholder="Apellidos" aria-label="Apellidos"
+                              value={a.borrador.apellidos} onChange={e => editarDatos(a.id, "apellidos", e.target.value)} disabled={procesando} />
+                            <input className={campoChico} autoCapitalize="characters" placeholder="Nombres" aria-label="Nombres"
+                              value={a.borrador.nombres} onChange={e => editarDatos(a.id, "nombres", e.target.value)} disabled={procesando} />
+                            <input className={`${campoChico} col-span-2`} inputMode="numeric" placeholder="Cédula (solo números)" aria-label="Cédula"
+                              value={a.borrador.cedula} onChange={e => editarDatos(a.id, "cedula", e.target.value)} disabled={procesando} />
+                          </div>
                         )}
                       </li>
                     ))}
@@ -513,7 +601,7 @@ export default function AppMovil() {
             <button type="button" onClick={subirMasiva} disabled={procesando || pendientes.length === 0}
               className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#e8740e] text-lg font-bold text-white shadow active:opacity-90 disabled:opacity-60">
               {procesando ? <Loader2 className="h-5 w-5 animate-spin" /> : cuenta("error") > 0 ? <RefreshCw className="h-5 w-5" /> : <UploadCloud className="h-5 w-5" />}
-              {procesando ? `Subiendo ${lote.filter(a => a.estado === "ok" || a.estado === "duplicado").length + 1} de ${lote.filter(a => a.estado !== "invalido").length}…`
+              {procesando ? `Subiendo ${lote.filter(a => a.estado === "ok" || a.estado === "duplicado").length + 1} de ${lote.filter(a => a.estado !== "invalido" && a.estado !== "sin_datos").length}…`
                 : cuenta("error") > 0 && cuenta("listo") === 0 ? `Reintentar ${cuenta("error")} con error`
                 : `Subir ${pendientes.length} archivo${pendientes.length === 1 ? "" : "s"}`}
             </button>
