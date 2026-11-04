@@ -2,7 +2,6 @@ import React, { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate } from "react-router";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
-import { LOGIN_TEMPORAL } from "./lib/config"; // ⚠️ TEMPORAL
 import { Layout } from "./components/layout/Layout";
 import { Home } from "./pages/Home";
 import { NovaLanding } from "./pages/NovaLanding";
@@ -176,20 +175,12 @@ function EleccionesRoute({ children }: { children: React.ReactNode }) {
 function ArchivoCentralRoute({ children }: { children: React.ReactNode }) {
   const { usuario, loading } = useAuth();
   if (loading) return <AuthSpinner />;
-  if (!usuario) return <Navigate to={LOGIN_TEMPORAL ? "/login-temporal" : "/login?redirect=/archivo-central"} replace />;
+  if (!usuario) return <Navigate to="/login?redirect=/archivo-central" replace />;
 
-  const roles = (usuario.roles ?? []).map((r) => String(r).trim().toUpperCase());
-  const tieneAcceso =
-    usuario.is_staff ||
-    usuario.rol === "admin" ||
-    usuario.rol === "area" ||
-    roles.includes("ADMIN") ||
-    roles.includes("ARCHIVO_CENTRAL") ||
-    roles.includes("REGISTRO_CONTROL") ||
-    roles.includes("SECRETARIA_GENERAL");
-
-  if (!tieneAcceso) {
-    return <Navigate to={usuario.rol === "area" ? "/area" : "/dashboard"} replace />;
+  // Archivo Central es un módulo del Panel de Área de NOVA: solo entra el rol "area".
+  // Qué puede hacer cada persona dentro lo decide el backend según su perfil del SGD.
+  if (usuario.rol !== "area") {
+    return <Navigate to={usuario.rol === "admin" ? "/admin" : "/dashboard"} replace />;
   }
   return <>{children}</>;
 }
@@ -260,8 +251,6 @@ function CampusLookupGuard() {
   return <CampusStudentLookup />;
 }
 
-// ⚠️ TEMPORAL (ver la ruta "login-temporal").
-const LoginTemporal = LOGIN_TEMPORAL ? lazy(() => import("./pages/login-temporal/LoginTemporal")) : null;
 
 // Archivo Central · app del celular (PWA, RF-AC-022). Fuera del Layout: pantalla completa en el celular.
 const AppMovil = lazy(() => import("./pages/archivo-central/movil/AppMovil"));
@@ -487,11 +476,6 @@ export const router = createBrowserRouter([
           </ArchivoCentralRoute>
         ),
       },
-      // ⚠️ TEMPORAL — login de pruebas por perfil. Fuera de `npm run dev` con VITE_LOGIN_TEMPORAL=true
-      // la ruta no existe y su código no entra al build. Borrar antes del despliegue.
-      ...(LoginTemporal
-        ? [{ path: "login-temporal", element: <Suspense fallback={<AuthSpinner />}><LoginTemporal /></Suspense> }]
-        : []),
       {
         path: "area",
         element: (

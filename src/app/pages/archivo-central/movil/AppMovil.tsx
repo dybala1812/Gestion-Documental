@@ -2,7 +2,7 @@
  * @file AppMovil.tsx
  * @description App del celular (PWA) para cargar historias académicas (RF-AC-021, RF-AC-022).
  * Ruta /movil, fuera del Layout de NOVA (pantalla completa en el celular).
- *  - Sesión: por ahora el login temporal de pruebas (/login-temporal?redirect=/movil); después, el de NOVA.
+ *  - Sesión: la de NOVA (sin sesión, va a /login?redirect=/movil).
  *  - Dos modos, con el mismo destino (Estado → Año → Nivel → Programa) y el título del documento:
  *      · Individual: fotos de las páginas (se unen en un PDF) + apellidos, nombres y cédula del estudiante.
  *      · Masiva: varios archivos nombrados "APELLIDOS NOMBRES - cédula.pdf" (como la carga D de la web);
@@ -18,8 +18,6 @@ import {
   Trash2, UploadCloud, User, WifiOff, XCircle,
 } from "lucide-react";
 import { tokens } from "../../../lib/api";
-import { LOGIN_TEMPORAL } from "../../../lib/config";
-import { borrarSesionTemporal, leerSesionTemporal } from "../../../lib/loginTemporal"; // ⚠️ TEMPORAL
 import { listarCatalogo } from "../../../lib/catalogosApi";
 import {
   ESTADOS_HISTORIA, apiCargarHistoria, leerNombreArchivo, nivelesDeProgramas, programasDelNivel,
@@ -61,7 +59,16 @@ function Campo({ label, requerido, children }: { label: string; requerido?: bool
   );
 }
 
-const haySesion = () => !!(leerSesionTemporal() ?? tokens.getAccess());
+const haySesion = () => !!tokens.getAccess();
+/** Nombre del usuario de NOVA guardado al iniciar sesión (localStorage "usuario"). */
+const nombreDeNova = (): string => {
+  try {
+    const u = JSON.parse(localStorage.getItem("usuario") ?? "null") as { nombre?: string; apellido?: string } | null;
+    return u ? `${u.nombre ?? ""} ${u.apellido ?? ""}`.trim() : "";
+  } catch {
+    return "";
+  }
+};
 const tamano = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / (1024 * 1024)).toFixed(1)} MB`);
 const esErrorDeRed = (e: unknown) =>
   e instanceof TypeError || !navigator.onLine || /failed to fetch|network/i.test(e instanceof Error ? e.message : String(e));
@@ -128,7 +135,6 @@ const ESTILO_ARCHIVO: Record<EstadoArchivo, { texto: string; clase: string }> = 
 
 export default function AppMovil() {
   usePwaMovil();
-  const sesion = leerSesionTemporal();
   const [modo, setModo] = useState<Modo>("individual");
   const [destino, setDestino] = useState<Destino>(DESTINO_INICIAL);
   const [programas, setProgramas] = useState<ProgramaHist[] | null>(null);
@@ -146,9 +152,9 @@ export default function AppMovil() {
   const galeria = useRef<HTMLInputElement>(null);
   const masivos = useRef<HTMLInputElement>(null);
 
-  // Sin sesión → al login (por ahora el temporal de pruebas; después el de NOVA) y de vuelta aquí.
+  // Sin sesión → al login de NOVA y de vuelta aquí.
   useEffect(() => {
-    if (!haySesion()) window.location.replace(LOGIN_TEMPORAL ? "/login-temporal?redirect=/movil" : "/login?redirect=/movil");
+    if (!haySesion()) window.location.replace("/login?redirect=/movil");
   }, []);
 
   useEffect(() => {
@@ -303,13 +309,13 @@ export default function AppMovil() {
       : { tipo: err ? "error" : "ok", texto: err ? `${resumen}. Pulsa Reintentar para los que fallaron.` : `Listo: ${resumen}.` });
   };
 
-  const salir = () => { borrarSesionTemporal(); window.location.assign(LOGIN_TEMPORAL ? "/login-temporal?redirect=/movil" : "/login?redirect=/movil"); };
+  const salir = () => { tokens.clear(); window.location.assign("/login?redirect=/movil"); };
 
   if (!haySesion()) {
     return <div className="flex min-h-screen items-center justify-center bg-[#f3ede1] text-[#1e3a5f]"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   }
 
-  const nombreUsuario = sesion ? `${sesion.usuario.nombre} ${sesion.usuario.apellido}`.trim() : "";
+  const nombreUsuario = nombreDeNova();
   const ocupado = subiendo || procesando;
 
   return (
