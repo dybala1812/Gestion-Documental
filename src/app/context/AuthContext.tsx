@@ -13,7 +13,6 @@ import {
   resolveDepName,
 } from "../lib/api";
 import { clearClassroomSession } from "../lib/classroomApi";
-import { borrarSesionTemporal, leerSesionTemporal } from "../lib/loginTemporal"; // ⚠️ TEMPORAL
 
 // ── Modelo de usuario normalizado para el frontend ──────────────────────
 /**
@@ -77,41 +76,6 @@ export interface Usuario {
  * @param d - Payload completo de la respuesta del endpoint /api/login/.
  * @returns Objeto `Usuario` normalizado (rol siempre "admin" si is_staff=true).
  */
-/**
- * ⚠️ TEMPORAL — usuario de NOVA armado con la sesión del login de pruebas (/login-temporal, ver
- * lib/loginTemporal.ts). Rol "area" para entrar al módulo Archivo Central; los permisos reales los
- * decide el backend según el perfil del SGD.
- */
-const NOMBRE_PERFIL: Record<string, string> = {
-  archivo_central: "Archivo Central", administrador: "Administrador", dependencia: "Dependencia",
-  registro_academico: "Registro Académico", secretaria_general: "Secretaría General",
-};
-function usuarioDeSesionTemporal(): Usuario | null {
-  const s = leerSesionTemporal();
-  if (!s) return null;
-  const u = s.usuario;
-  return {
-    id: `sgd-prueba-${u.id}`,
-    nombre: u.nombre,
-    apellido: u.apellido,
-    email: u.email,
-    username: u.email,
-    tipo_documento: "CC",
-    cedula: "",
-    telefono: "",
-    ciudad: "",
-    rol: "area",
-    roles: [],
-    dependencyId: u.dependencia_id ? String(u.dependencia_id) : undefined,
-    dependencyName: u.dependencia ?? `${NOMBRE_PERFIL[u.perfil] ?? u.perfil} (prueba)`,
-    is_staff: false,
-    perfil_tipo: "admin_area",
-    is_area_leader: false,
-    can_handle_pqrs: false,
-    can_consume_campus_api: false,
-  };
-}
-
 /** Determina si el usuario tiene capacidades de administrador. */
 function hasAdminPrivilege(is_staff: boolean, roles?: string[]): boolean {
   return is_staff || (roles?.includes("ADMIN") ?? false);
@@ -242,25 +206,19 @@ const AuthContext: React.Context<AuthContextType> =
  *  3. Si el token es inválido o el backend rechaza la sesión, la limpia automáticamente.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // ⚠️ TEMPORAL: con sesión del login de pruebas no se restaura ni valida la sesión de NOVA.
-  const [sesionTemporal] = useState(() => usuarioDeSesionTemporal());
-  const [usuario, setUsuario] = useState<Usuario | null>(sesionTemporal);
-  const [loading, setLoading] = useState(!sesionTemporal); // bloquea el render hasta tener estado de sesión
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [loading, setLoading] = useState(true); // bloquea el render hasta tener estado de sesión
   const navigate = useNavigate();
 
   // ── Escuchar evento de sesión expirada (emitido por apiFetch al recibir 401 irrecuperable) ──
   useEffect(() => {
-    if (sesionTemporal) {
-      console.warn("[TEMPORAL] Sesión del login de pruebas por perfil. Solo en npm run dev.");
-      return; // los 401 de NOVA no cierran la sesión temporal (el SGD la valida con su propio token)
-    }
     const handleSessionExpired = () => {
       setUsuario(null);
       navigate("/login", { replace: true });
     };
     window.addEventListener("auth:session-expired", handleSessionExpired);
     return () => window.removeEventListener("auth:session-expired", handleSessionExpired);
-  }, [navigate, sesionTemporal]);
+  }, [navigate]);
 
   // ── Refresco proactivo del access token ─────────────────────────────────
   // ACCESS_TOKEN_LIFETIME es de 15 min. En lugar de esperar a que expire y
@@ -268,16 +226,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // provocar carreras de rotación de refresh token y un logout espurio),
   // renovamos el access token cada 5 min mientras haya una sesión activa.
   useEffect(() => {
-    if (!usuario || sesionTemporal) return;
+    if (!usuario) return;
     const interval = setInterval(() => {
       tryRefreshToken();
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [usuario, sesionTemporal]);
+  }, [usuario]);
 
   // ── Restaurar sesión al montar el proveedor ────────────────────────────────
   useEffect(() => {
-    if (sesionTemporal) return; // sesión temporal: no restaurar ni validar contra NOVA
     const stored = localStorage.getItem("usuario");
     const hasUser = !!stored;
     const hasAccess = !!tokens.getAccess();
@@ -435,7 +392,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /** Cierra la sesión: limpia el estado React y elimina todos los datos de localStorage. */
   const logout = useCallback(() => {
     setUsuario(null);
-    borrarSesionTemporal(); // ⚠️ TEMPORAL
     tokens.clear(); // elimina access_token, refresh_token y usuario de localStorage
     clearClassroomSession();
   }, []);
