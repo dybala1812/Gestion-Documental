@@ -15,7 +15,7 @@
         - script-src: solo propio + Google Identity Services (login con Google)
         - style-src:  propio + inline (necesario para Tailwind/MUI en runtime)
         - connect-src: propio + backend configurable por VITE_API_URL
-        - frame-src:  Google para el popup de OAuth
+        - frame-src:  Google para el popup de OAuth + blob: (visor de PDF de Archivo Central)
         NOTA: ajustar connect-src con la URL real del backend en producción.
       -->
       <!-- CSP definida en nginx.conf para permitir configuración por entorno -->
