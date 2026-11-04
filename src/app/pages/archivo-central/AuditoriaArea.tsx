@@ -2,7 +2,7 @@
  * @file AuditoriaArea.tsx
  * @description Administración › Auditoría (RF-AC-023): quién hizo qué, cuándo y sobre qué registro,
  * incluidos los intentos denegados. Solo lectura: la auditoría no se edita ni se borra.
- * Permiso auditoria.consultar (Administrador); el backend registra los intentos sin permiso.
+ * Permiso auditoria.consultar (Archivo Central y Administrador, D-28); el backend registra los intentos sin permiso.
  */
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, ShieldAlert, ShieldCheck } from "lucide-react";

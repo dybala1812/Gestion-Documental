@@ -81,8 +81,8 @@ const menuGroups: MenuGroup[] = [
   {
     title: "Comunicaciones",
     items: [
-      { key: "bandeja", label: "Bandeja", icon: Mail, disponible: true },
-      { key: "correos-sin-asociar", label: "Correos sin asociar", icon: MailQuestion, disponible: true },
+      { key: "bandeja", label: "Bandeja", icon: Mail, disponible: true, oculto: true },
+      { key: "correos-sin-asociar", label: "Correos sin asociar", icon: MailQuestion, disponible: true, oculto: true },
       { key: "registro-historico", label: "Registro histórico", icon: History, disponible: true, oculto: true },
     ],
   },

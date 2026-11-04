@@ -28,12 +28,3 @@ export const CAPTCHA_DISABLED =
 export const GOOGLE_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
 
-/**
- * ⚠️ TEMPORAL — BORRAR ANTES DEL DESPLIEGUE (ver ia_contexto/login-temporal.md).
- * Login de pruebas por perfil del módulo Archivo Central en /login-temporal. Requiere `npm run dev`
- * (import.meta.env.DEV) y en `.env.local`: VITE_LOGIN_TEMPORAL=true. La clave vive solo en el
- * backend (SGD_LOGIN_TEMPORAL_CLAVE); aquí no hay ningún secreto. En el build de producción
- * import.meta.env.DEV es false: la ruta ni siquiera se incluye.
- */
-export const LOGIN_TEMPORAL =
-  import.meta.env.DEV && import.meta.env.VITE_LOGIN_TEMPORAL === "true";

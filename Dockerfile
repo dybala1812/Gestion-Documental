@@ -13,6 +13,8 @@
 #   VITE_GOOGLE_CLIENT_ID → OAuth 2.0 Client ID de Google.
 #   VITE_DISABLE_CAPTCHA  → "true" en local/dev, "false" en producción.
 #   VITE_RECAPTCHA_SITE_KEY → Site key pública de reCAPTCHA (vacío si deshabilitado).
+#   VITE_SGD_API_URL      → API del backend SGD (Archivo Central), con /api al final.
+#                           En producción: https://<dominio del backend SGD>/api
 # ─────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: Build ────────────────────────────────────────────────────
@@ -32,6 +34,7 @@ ARG VITE_RECAPTCHA_SITE_KEY
 ARG VITE_CONVOCATORIAS_APP_URL=/convocatorias-app
 ARG VITE_CONVOCATORIAS_SSO_PATH=/api/auth/sso
 ARG VITE_CONVOCATORIAS_REDIRECT_PATH=/
+ARG VITE_SGD_API_URL
 
 ENV VITE_API_URL=$VITE_API_URL \
     VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID \
@@ -39,7 +42,8 @@ ENV VITE_API_URL=$VITE_API_URL \
     VITE_RECAPTCHA_SITE_KEY=$VITE_RECAPTCHA_SITE_KEY \
     VITE_CONVOCATORIAS_APP_URL=$VITE_CONVOCATORIAS_APP_URL \
     VITE_CONVOCATORIAS_SSO_PATH=$VITE_CONVOCATORIAS_SSO_PATH \
-    VITE_CONVOCATORIAS_REDIRECT_PATH=$VITE_CONVOCATORIAS_REDIRECT_PATH
+    VITE_CONVOCATORIAS_REDIRECT_PATH=$VITE_CONVOCATORIAS_REDIRECT_PATH \
+    VITE_SGD_API_URL=$VITE_SGD_API_URL
 
 # Copiar el resto del código y compilar.
 # Se usa 'vite build' directamente en lugar de 'npm run build' porque
