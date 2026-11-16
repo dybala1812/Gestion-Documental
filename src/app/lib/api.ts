@@ -1051,6 +1051,8 @@ export interface SolicitudRolAPI {
   dep_name: string;
   dep_code: string;
   dependency: string;
+  /** Tipo de rol solicitado. */
+  tipo: "ADMIN_AREA" | "DOCENTE";
   estado: "PENDIENTE" | "APROBADA" | "RECHAZADA";
   notas_admin: string | null;
   revisado_por_email: string | null;
@@ -3277,6 +3279,7 @@ export interface ChatBotConfigAPI {
   knowledge_documents: ChatBotKnowledgeDocumentAPI[];
   web_sources: ChatBotWebSourceAPI[];
   activo: boolean;
+  inventario_notify_email?: string;
   updated_at: string;
 }
 
@@ -3692,7 +3695,7 @@ export async function apiListPhysicalAssets(depId?: string): Promise<PhysicalAss
 }
 
 export async function apiCreatePhysicalAsset(
-  data: Omit<PhysicalAssetAPI, "id" | "condicion_display" | "created_by" | "created_by_nombre" | "created_at" | "updated_at">,
+  data: Omit<PhysicalAssetAPI, "id" | "condicion_display" | "images" | "log_entries_count" | "created_by" | "created_by_nombre" | "created_at" | "updated_at">,
 ): Promise<PhysicalAssetAPI> {
   return apiFetch<PhysicalAssetAPI>(
     "/api/pqrs/inventory/assets/",

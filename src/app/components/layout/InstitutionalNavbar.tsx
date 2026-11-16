@@ -262,7 +262,7 @@ export function InstitutionalNavbar() {
     : '?';
 
   const isAdminUser = !!user && (user.rol === 'admin' || user.is_staff || (user.roles ?? []).includes('ADMIN'));
-  const isCoordinator = !!user && ((user.roles ?? []).includes('COORDINATOR') || (user.roles ?? []).includes('COORDINACION') || user.rol === 'coordinator');
+  const isCoordinator = !!user && ((user.roles ?? []).includes('COORDINATOR') || (user.roles ?? []).includes('COORDINACION'));
   const hasDiplomaAccess = !!user && (
     user.is_staff ||
     user.rol === 'admin' ||

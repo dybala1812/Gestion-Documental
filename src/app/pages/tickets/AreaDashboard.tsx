@@ -724,6 +724,19 @@ export function AreaDashboard() {
     URL.revokeObjectURL(url);
   };
 
+  /** Descarga un adjunto de ticket interno desde su URL (mismo mecanismo que la vista previa). */
+  const handleDownloadTicketAttachment = async (attachment: TicketAttachment) => {
+    if (!attachment.file) return;
+    try {
+      const token = sessionStorage.getItem("access_token");
+      const res = await fetch(attachment.file, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      triggerDownload(await res.blob(), attachment.filename);
+    } catch (error) {
+      toast.error("No se pudo descargar el adjunto", { description: formatApiError(error) });
+    }
+  };
+
   const handleDownloadAttachment = async (pqrsId: string, attachment: Attachment) => {
     try {
       const result = await apiDownloadAttachment(pqrsId, attachment.id);
@@ -2859,7 +2872,7 @@ export function AreaDashboard() {
                                   className="w-full text-left py-2.5 px-1 hover:bg-gray-50 rounded-md transition-colors flex items-center gap-3"
                                 >
                                   <div className="flex-1 min-w-0">
-                                    <div className="text-xs font-mono text-gray-500 truncate">{p.codigo_radicado || p.id}</div>
+                                    <div className="text-xs font-mono text-gray-500 truncate">{p.numero_radicado || p.id}</div>
                                     <div className="text-sm font-medium text-gray-800 truncate">{p.subject || "(sin asunto)"}</div>
                                     <div className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
                                       <span>{PQRS_STATUS_LABEL[p.status as keyof typeof PQRS_STATUS_LABEL] ?? p.status}</span>
@@ -4779,7 +4792,7 @@ export function AreaDashboard() {
                                         )}
                                         <button
                                           type="button"
-                                          onClick={() => selected && handleDownloadAttachment(selected.id, att)}
+                                          onClick={() => handleDownloadTicketAttachment(att)}
                                           className="p-1.5 rounded-md hover:bg-blue-100 text-gray-500 hover:text-blue-600 transition-colors"
                                           title="Descargar"
                                         >

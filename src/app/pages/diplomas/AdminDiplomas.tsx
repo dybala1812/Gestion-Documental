@@ -352,7 +352,7 @@ export function AdminDiplomas() {
     setSendingEmail(true);
     try {
       const response = await apiSendDiplomaEmail(lastSingleResult.diploma.id);
-      const updatedDiploma = response.diploma || response;
+      const updatedDiploma = (response as { diploma?: typeof response }).diploma || response;
       setLastSingleResult({
         ...lastSingleResult,
         diploma: updatedDiploma,

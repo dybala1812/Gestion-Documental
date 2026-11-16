@@ -52,8 +52,12 @@ export function RackList() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setFormError(null);
     try {
-      if (editing) await apiUpdatePuerto(editing.id, form);
-      else         await apiCreatePuerto(form);
+      const payload: Partial<PuertoRack> = {
+        ...form,
+        puerto_numero: form.puerto_numero === "" ? undefined : Number(form.puerto_numero),
+      };
+      if (editing) await apiUpdatePuerto(editing.id, payload);
+      else         await apiCreatePuerto(payload);
       setOpen(false); load();
     } catch (err: unknown) { setFormError(err instanceof Error ? err.message : "Error al guardar"); }
     finally { setSaving(false); }
