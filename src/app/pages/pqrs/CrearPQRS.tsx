@@ -129,7 +129,7 @@ export function CrearPQRS() {
     if (data.subject)        setValue("subject",     data.subject,     { shouldValidate: true });
     if (data.description)    setValue("description", data.description, { shouldValidate: true });
     if (data.anon_nombre)    setValue("anon_nombre",  data.anon_nombre);
-    if (data.anon_documento) setValue("anon_document_number", data.anon_documento);
+    if (data.anon_documento) setValue("anon_documento", data.anon_documento);
     if (data.anon_email)     setValue("anon_email",   data.anon_email);
     setShowVoiceWizard(false);
     if (shouldSubmit) {

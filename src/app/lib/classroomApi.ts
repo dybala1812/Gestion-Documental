@@ -83,6 +83,7 @@ export interface ClassroomPlan {
   academic_period: string;
   status: "planeacion" | "revision" | "aprobado";
   general_description?: string | null;
+  methodology?: string | null;
   class_type?: "teorico" | "practico" | "teorico_practico" | null;
   modality?: "presencial" | "virtual" | "hibrida" | "dual" | "unica" | null;
   disciplinary_field?: "comun" | "basico_disciplinar" | null;
@@ -515,6 +516,8 @@ export async function apiListPlans(params: {
   course_id?: string;
   academic_period?: string;
   author_id?: string;
+  faculty_id?: string;
+  program_id?: string;
   page?: number;
   per_page?: number;
 } = {}): Promise<Paginated<ClassroomPlan>> {
@@ -530,7 +533,9 @@ export async function apiListPlans(params: {
 
 export async function apiCreatePlan(body: {
   course_id: string;
+  academic_period?: string;
   general_description?: string;
+  methodology?: string;
   class_type?: "teorico" | "practico" | "teorico_practico";
   modality?: "presencial" | "virtual" | "hibrida" | "dual" | "unica";
   disciplinary_field?: "comun" | "basico_disciplinar";

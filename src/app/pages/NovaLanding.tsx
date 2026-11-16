@@ -153,6 +153,7 @@ const SERVICES: ServiceCard[] = [
     available: false,
     detail: {
       subtitle: "En desarrollo",
+      intro: "",
       steps: [],
       whoFor: [],
       tip: "",
@@ -199,6 +200,7 @@ const COMING_SOON: ServiceCard[] = [
     available: false,
     detail: {
       subtitle: "En desarrollo",
+      intro: "",
       steps: [],
       whoFor: [],
       tip: "",
@@ -217,6 +219,7 @@ const COMING_SOON: ServiceCard[] = [
     available: false,
     detail: {
       subtitle: "En desarrollo",
+      intro: "",
       steps: [],
       whoFor: [],
       tip: "",
@@ -235,6 +238,7 @@ const COMING_SOON: ServiceCard[] = [
     available: false,
     detail: {
       subtitle: "En desarrollo",
+      intro: "",
       steps: [],
       whoFor: [],
       tip: "",

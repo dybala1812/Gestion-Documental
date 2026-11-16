@@ -486,7 +486,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
  */
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (process.env.NODE_ENV !== "production" && context === defaultAuthContext) {
+  if (import.meta.env.DEV && context === defaultAuthContext) {
     // Solo en desarrollo: avisa si se usa fuera del proveedor (ej. durante HMR)
     // pero NO lanza para no crashear la app durante la recuperación de error.
     console.warn("[useAuth] Llamado fuera de AuthProvider — devolviendo estado de sesión cerrada.");

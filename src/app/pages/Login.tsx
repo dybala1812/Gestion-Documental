@@ -213,7 +213,6 @@ export function Login() {
                 toast.error("Error con Google", { description: "No se pudo conectar con Google" });
               }}
               useOneTap
-              locale="es"
               text="signin_with"
               shape="rectangular"
               theme="outline"

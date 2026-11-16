@@ -14,7 +14,7 @@ import { cn } from "../../lib/utils";
 
 interface FormattingToolbarProps {
   /** Ref del textarea controlado sobre el que se aplica el formato. */
-  textareaRef: RefObject<HTMLTextAreaElement>;
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
   /** Valor actual del textarea. */
   value: string;
   /** Callback para actualizar el valor tras aplicar el formato. */

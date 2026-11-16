@@ -22,7 +22,7 @@ function ScrollToTop() {
 
 export function Layout() {
   return (
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID} locale="es">
     <AccessibilityProvider>
     <AuthProvider>
       <div className="min-h-screen bg-background flex flex-col">
