@@ -42,6 +42,14 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+
+  // Inyecta el entorno de Vercel (production | preview | development) en el
+  // bundle para que config.ts pueda excluir el login temporal de producción.
+  // En un build local sin Vercel, process.env.VERCEL_ENV no existe → "".
+  define: {
+    __VERCEL_ENV__: JSON.stringify(process.env.VERCEL_ENV ?? ''),
+  },
+
   resolve: {
     alias: {
       // '@' apunta a la carpeta src/ para evitar rutas relativas largas
