@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { sileo } from "sileo";
 import {
-  ArrowLeft, Ban, Bell, Check, ChevronRight, Clock, CornerUpLeft, Inbox, Loader2, Mail, MailPlus, Send, Trash2, Undo2,
+  ArrowLeft, Ban, Bell, Check, ChevronRight, Clock, CornerUpLeft, Inbox, Loader2, Mail, MailPlus, Send, Undo2,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -20,14 +20,14 @@ import { Textarea } from "../../components/ui/textarea";
 import {
   type Comunicacion, type DependenciaCom, type EventoCom, type TipoEvento,
   EVENTO_LABEL, PLAZO_DEFECTO_DIAS_HABILES, TIPO_LABEL, TRANSICIONES,
-  apiAnularComunicacion, apiCorreoAdicional, apiDevolverComunicacion, apiEliminarComunicacion, apiRecordatorioManual, apiRemitirComunicacion, apiResponderDirecto, apiResponderRemitente,
+  apiAnularComunicacion, apiCorreoAdicional, apiDevolverComunicacion, apiRecordatorioManual, apiRemitirComunicacion, apiResponderDirecto, apiResponderRemitente,
   estaVencida, formatoFecha, sumarDiasHabiles,
 } from "../../lib/comunicacionesApi";
 import { type CorreoEvento, EVENTOS_CON_CORREO, apiCorreoDeEvento } from "../../lib/correosEventoApi";
-import { AdjuntoChip, EstadoBadge } from "./comunicacionesUi";
+import { AdjuntoChip, CategoriaBadge, EstadoBadge, PrioridadBadge } from "./comunicacionesUi";
 import { VisorArchivos } from "./VisorArchivos";
 
-type Accion = "remitir" | "devolver" | "responder" | "responderDirecto" | "recordatorio" | "adicional" | "anular" | "eliminar" | null;
+type Accion = "remitir" | "devolver" | "responder" | "responderDirecto" | "recordatorio" | "adicional" | "anular" | null;
 
 interface Props {
   comunicacion: Comunicacion;
@@ -35,7 +35,6 @@ interface Props {
   usuarioNombre: string;
   onClose: () => void;
   onActualizada: (c: Comunicacion, extra?: Comunicacion) => void;
-  onEliminada?: (id: number) => void;
 }
 
 /** Pasos del circuito y el evento que marca cada uno (para mostrar su fecha). */
@@ -161,7 +160,7 @@ function ColorEvento(tipo: TipoEvento): string {
   return "bg-orange-400";
 }
 
-export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, onActualizada, onEliminada }: Props) {
+export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, onActualizada }: Props) {
   const [accion, setAccion] = useState<Accion>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -317,16 +316,6 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
         const r = await apiAnularComunicacion(c.id, motivo);
         sileo.success({ title: "Comunicación anulada" });
         onActualizada(r);
-      } else if (accion === "eliminar") {
-        const r = await apiEliminarComunicacion(c.id);
-        sileo.success({
-          title: "Comunicación eliminada",
-          description: `${r.consecutivo} y sus archivos fueron borrados`,
-        });
-        onEliminada?.(c.id);
-        setAccion(null);
-        onClose();
-        return;
       }
       setAccion(null);
     } catch (e) {
@@ -374,10 +363,17 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
             <EstadoBadge estado={c.estado} />
             {estaVencida(c) && <span className="text-xs font-semibold text-red-600">Vencida</span>}
             {c.por_escalar && <span className="text-xs font-semibold text-red-700">Por escalar</span>}
+            {c.categoria && <CategoriaBadge categoria={c.categoria} />}
+            {c.prioridad && <PrioridadBadge prioridad={c.prioridad} />}
           </div>
           <p className="text-sm text-gray-500 mt-1">
             {TIPO_LABEL[c.tipo]} · recibida el {formatoFecha(c.fecha_recepcion)} · <span className="text-gray-700">{c.asunto}</span>
           </p>
+          {c.resumen && (
+            <p className="text-sm text-gray-600 mt-1">
+              <span className="font-semibold">Resumen{c.triaje_origen === "ia" ? " sugerido por IA" : ""}:</span> {c.resumen}
+            </p>
+          )}
         </div>
 
         {!anulada && c.estado !== "cerrada" && (
@@ -395,11 +391,6 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
             {(c.estado === "nueva" || c.estado === "remitida" || c.estado === "devuelta" || c.estado === "respondida_dependencia") && (
               <Button variant="outline" size="sm" className="text-blue-700 border-blue-200 hover:bg-blue-50" onClick={() => abrir("adicional")}>
                 <MailPlus className="w-4 h-4 mr-1" /> Correo adicional
-              </Button>
-            )}
-            {onEliminada && (
-              <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => abrir("eliminar")}>
-                <Trash2 className="w-4 h-4 mr-1" /> Eliminar
               </Button>
             )}
             {puede("anulada") && (
@@ -764,31 +755,13 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
             </>
           )}
 
-          {accion === "eliminar" && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-red-600 flex items-center gap-2"><Trash2 className="w-5 h-5" /> Eliminar {c.consecutivo}</DialogTitle>
-                <DialogDescription className="text-red-700">
-                  ⚠️ Esta acción es irreversible. Se borrará la comunicación, sus eventos, adjuntos y archivos del disco.
-                  Solo usar en pruebas.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800">
-                <p>Consecutivo: <span className="font-mono font-semibold">{c.consecutivo}</span></p>
-                <p>Asunto: {c.asunto}</p>
-                <p>Adjuntos: {c.adjuntos.length}</p>
-              </div>
-            </>
-          )}
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setAccion(null)} disabled={enviando}>Cancelar</Button>
             <Button
               onClick={ejecutar}
               disabled={enviando}
               className={
-                accion === "eliminar" ? "bg-red-600 hover:bg-red-700 text-white"
-                  : accion === "anular" ? "bg-gray-700 hover:bg-gray-800 text-white"
+                accion === "anular" ? "bg-gray-700 hover:bg-gray-800 text-white"
                     : accion === "devolver" ? "bg-rose-600 hover:bg-rose-700 text-white"
                       : accion === "responder" || accion === "responderDirecto" ? "bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white"
                         : accion === "recordatorio" ? "bg-amber-600 hover:bg-amber-700 text-white"
@@ -802,8 +775,7 @@ export function DetalleComunicacion({ comunicacion: c, dependencias, onClose, on
                   accion === "responder" ? "Enviar respuesta" :
                     accion === "responderDirecto" ? "Enviar respuesta directa" :
                       accion === "recordatorio" ? "Enviar recordatorio" :
-                        accion === "adicional" ? "Enviar correo" :
-                          accion === "eliminar" ? "Eliminar definitivamente" : "Anular"}
+                        accion === "adicional" ? "Enviar correo" : "Anular"}
             </Button>
           </DialogFooter>
         </DialogContent>

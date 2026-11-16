@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Ban, Download, FileText, FolderOpen, Loader2, Pencil,
 } from "lucide-react";
-import { apiAnularDocumento } from "../../lib/documentosApi";
+import { apiAnularDocumento, apiClasificarDocumento } from "../../lib/documentosApi";
+import { formatApiError } from "../../lib/api";
 import { VisorDocumento, guardarArchivoDescargado, useArchivoDocumento } from "./VisorDocumento";
 import { CAMPOS_UBICACION, textoUbicacion, type UbicacionBodega } from "./UbicacionFisica";
 
@@ -75,6 +76,7 @@ export function DetalleDocumento({ documento, documentoId, archivoId, textoVolve
   const [confirmando, setConfirmando] = useState(false);
   const [motivoAnulacion, setMotivoAnulacion] = useState("");
   const [anulando, setAnulando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
 
   const anulado = doc.estado === "Anulado";
   const numero = doc.consecutivo.split("/")[0];
@@ -87,11 +89,25 @@ export function DetalleDocumento({ documento, documentoId, archivoId, textoVolve
     });
     setEditando(true);
   };
-  const guardar = () => {
-    // TODO: enviar los cambios al backend (y registrar la auditoría).
-    setDoc(d => ({ ...d, ...borrador }));
-    setEditando(false);
-    toast.success("Datos actualizados");
+  /** Guarda en el backend sin cambiar el estado del documento; la función SQL revisa el permiso y queda en la auditoría. */
+  const guardar = async () => {
+    if (!documentoId) return;
+    setGuardando(true);
+    try {
+      const contraparte = borrador.contraparte.trim();
+      await apiClasificarDocumento(documentoId, {
+        ...(doc.tipo === "Salida" ? { destinatario: contraparte } : { remitente: contraparte }),
+        carro: borrador.carro, estante: borrador.estante, bandeja: borrador.bandeja,
+        caja: borrador.caja, carpeta: borrador.carpeta,
+      }, false);
+      setDoc(d => ({ ...d, ...borrador }));
+      setEditando(false);
+      toast.success("Datos actualizados");
+    } catch (e) {
+      toast.error(formatApiError(e));
+    } finally {
+      setGuardando(false);
+    }
   };
   /** Anula en el backend (RF-AC-024): no se elimina, queda marcado como anulado, con motivo y auditado. */
   const anular = async () => {
@@ -133,7 +149,6 @@ export function DetalleDocumento({ documento, documentoId, archivoId, textoVolve
     ["Dependencia", doc.dependencia],
     ["Asunto", doc.asunto],
     [entrada ? "Remitente" : "Destinatario", editable("contraparte", doc.contraparte)],
-    [entrada ? "Recibió" : "Envió", editable("persona", doc.persona)],
     ["Código TRD", doc.trd],
     // Carro · Estante · Bandeja · Caja · Carpeta, en el mismo orden que en los formularios.
     ...CAMPOS_UBICACION.map(c => [c.etiqueta, editable(c.clave, doc[c.clave] || "—")] as [string, React.ReactNode]),
@@ -241,8 +256,8 @@ export function DetalleDocumento({ documento, documentoId, archivoId, textoVolve
           <div className="flex flex-wrap gap-2">
             {editando ? (
               <>
-                <button onClick={guardar} className="inline-flex h-10 items-center rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white shadow-sm hover:opacity-90">
-                  Guardar cambios
+                <button onClick={guardar} disabled={guardando} className="inline-flex h-10 items-center rounded-lg bg-[#1e3a5f] px-4 disabled:opacity-60 text-sm font-semibold text-white shadow-sm hover:opacity-90">
+                  {guardando ? "Guardando…" : "Guardar cambios"}
                 </button>
                 <button onClick={() => setEditando(false)} className="inline-flex h-10 items-center rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-4 text-sm font-semibold text-[#1e3a5f] hover:bg-[#f3ede1]">
                   Cancelar

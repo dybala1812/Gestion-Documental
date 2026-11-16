@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { apiClasificarDocumento, apiListAsuntos, type AsuntoCat } from "../../lib/documentosApi";
 import { VisorDocumento, guardarArchivoDescargado, useArchivoDocumento } from "./VisorDocumento";
 import { UbicacionCampos, type ValorUbicacion } from "./UbicacionFisica";
-import { AlertCircle, ArrowLeft, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, Loader2, ScanText } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, Loader2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "../../components/ui/dialog";
@@ -265,13 +265,6 @@ export function ClasificarDocumento({ documentos, indiceInicial, onClasificado, 
           <section className={`${panel} p-5`}>
             <div className="mb-4 flex items-center justify-between gap-3">
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6b7a8d]">Datos del documento</p>
-              <button
-                type="button"
-                onClick={() => toast.info("La lectura automática del documento aún no está conectada")}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[rgba(30,58,95,0.15)] bg-white px-3 py-1.5 text-xs font-semibold text-[#1e3a5f] hover:bg-[#f3ede1]"
-              >
-                <ScanText className="h-3.5 w-3.5" /> Tomar del documento
-              </button>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

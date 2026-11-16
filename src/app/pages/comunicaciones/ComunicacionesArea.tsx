@@ -13,9 +13,9 @@ import { AlertTriangle, Inbox, Loader2, Mail, MailQuestion, RefreshCw, Send } fr
 import {
   type Comunicacion, type CorreoSinAsociar, type DependenciaCom,
   apiListComunicaciones, apiListCorreosSinAsociar, apiListDependenciasCom, estaVencida,
-  apiObtenerComunicacion,
+  apiActualizarTriaje, apiObtenerComunicacion,
 } from "../../lib/comunicacionesApi";
-import { BandejaComunicaciones } from "./BandejaComunicaciones";
+import { BandejaComunicaciones, type CambiosTriaje } from "./BandejaComunicaciones";
 import { CorreosSinAsociar as CorreosSinAsociarSeccion } from "./CorreosSinAsociar";
 import { RegistroHistorico } from "./RegistroHistorico";
 import { DetalleComunicacion } from "./DetalleComunicacion";
@@ -56,6 +56,7 @@ export function ComunicacionesArea({
   const [correos, setCorreos] = useState<CorreoSinAsociar[]>([]);
   const [dependencias, setDependencias] = useState<DependenciaCom[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [abierta, setAbierta] = useState<Comunicacion | null>(null);
   const [version, setVersion] = useState(0);
 
@@ -77,8 +78,9 @@ export function ComunicacionesArea({
       setComunicaciones(coms);
       setCorreos(sinAsoc);
       setDependencias(deps);
-    } catch {
-      sileo.error({ title: "Error al cargar las comunicaciones" });
+      setErrorCarga(null);
+    } catch (e) {
+      setErrorCarga(formatApiError(e));
     } finally {
       setCargando(false);
     }
@@ -106,6 +108,16 @@ export function ComunicacionesArea({
     setVersion(v => v + 1);
   };
 
+  // Leído y reclasificar: se queda en la bandeja, sin abrir el detalle.
+  const aplicarTriaje = async (c: Comunicacion, cambios: CambiosTriaje) => {
+    try {
+      const actualizada = await apiActualizarTriaje(c.id, cambios);
+      setComunicaciones(prev => prev.map(x => (x.id === actualizada.id ? actualizada : x)));
+    } catch (e) {
+      sileo.error({ title: "No se pudo actualizar el correo", description: formatApiError(e) });
+    }
+  };
+
   const nuevas = comunicaciones.filter(c => c.estado === "nueva").length;
   const remitidas = comunicaciones.filter(c => c.estado === "remitida" || c.estado === "devuelta").length;
   const respondidas = comunicaciones.filter(c => c.estado === "respondida_dependencia").length;
@@ -127,11 +139,6 @@ export function ComunicacionesArea({
         usuarioNombre={usuarioNombre}
         onClose={() => setAbierta(null)}
         onActualizada={reemplazar}
-        onEliminada={(id) => {
-          setComunicaciones(prev => prev.filter(c => c.id !== id));
-          setCorreos(prev => prev.filter(c => c.comunicacion_id !== id));
-          setAbierta(null);
-        }}
       />
     );
   }
@@ -206,10 +213,24 @@ export function ComunicacionesArea({
         <div className="flex items-center justify-center py-12 text-[#6b7a8d] text-sm gap-2">
           <Loader2 className="w-4 h-4 animate-spin" /> Cargando comunicaciones…
         </div>
+      ) : errorCarga && comunicaciones.length === 0 ? (
+        <div role="alert" className="flex flex-col items-center gap-3 py-12 text-center">
+          <AlertTriangle className="w-8 h-8 text-[#e8740e]" />
+          <div>
+            <p className="text-sm font-bold text-[#1e3a5f]">No se pudieron cargar las comunicaciones</p>
+            <p className="text-xs text-[#6b7a8d] mt-1">{errorCarga}</p>
+          </div>
+          <button onClick={cargar} className="flex items-center gap-1.5 text-sm font-semibold text-white bg-[#1e3a5f] hover:bg-[#2a4a6f] rounded-lg px-4 py-2 transition-colors">
+            <RefreshCw className="w-4 h-4" /> Reintentar
+          </button>
+        </div>
       ) : (
         <>
+          {errorCarga && (
+            <p role="alert" className="text-xs font-semibold text-[#e8740e]">No se pudo actualizar la bandeja: se muestra la última información cargada.</p>
+          )}
           {seccion === "bandeja" && (
-            <BandejaComunicaciones comunicaciones={comunicaciones} dependencias={dependencias} onAbrir={setAbierta} />
+            <BandejaComunicaciones comunicaciones={comunicaciones} dependencias={dependencias} onAbrir={setAbierta} onTriaje={aplicarTriaje} />
           )}
           {seccion === "sinAsociar" && (
             <CorreosSinAsociarSeccion

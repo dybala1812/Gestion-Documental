@@ -39,6 +39,10 @@ export type TipoEvento =
   | "correo_adicional"
   | "error_envio";
 
+export type CategoriaCorreo = "urgente" | "academico" | "administrativo" | "promociones" | "otros";
+
+export type PrioridadCorreo = "alta" | "media" | "baja";
+
 export interface DependenciaCom {
   id: number;
   codigo: string;
@@ -87,6 +91,12 @@ export interface Comunicacion {
   por_escalar: boolean;
   anulado_motivo?: string | null;
   cerrado_en?: string | null;
+  /** Triaje (D-32): lo sugiere la IA de n8n y una persona lo puede corregir. */
+  categoria: CategoriaCorreo | null;
+  prioridad: PrioridadCorreo | null;
+  resumen: string | null;
+  triaje_origen: "ia" | "manual" | null;
+  leido_en: string | null;
   adjuntos: AdjuntoCom[];
   eventos: EventoCom[];
 }
@@ -189,6 +199,42 @@ export const ESTADO_BADGE: Record<EstadoComunicacion, string> = {
   cerrada: "bg-green-50 text-green-700 border-green-200",
   anulada: "bg-gray-100 text-gray-500 border-gray-200",
 };
+
+export const CATEGORIA_LABEL: Record<CategoriaCorreo, string> = {
+  urgente: "Urgente",
+  academico: "Académico",
+  administrativo: "Administrativo",
+  promociones: "Promociones",
+  otros: "Otros",
+};
+
+export const CATEGORIA_BADGE: Record<CategoriaCorreo, string> = {
+  urgente: "bg-red-50 text-red-700 border-red-200",
+  academico: "bg-blue-50 text-blue-700 border-blue-200",
+  administrativo: "bg-violet-50 text-violet-700 border-violet-200",
+  promociones: "bg-amber-50 text-amber-700 border-amber-200",
+  otros: "bg-gray-100 text-gray-600 border-gray-200",
+};
+
+export const PRIORIDAD_LABEL: Record<PrioridadCorreo, string> = {
+  alta: "Alta",
+  media: "Media",
+  baja: "Baja",
+};
+
+export const PRIORIDAD_BADGE: Record<PrioridadCorreo, string> = {
+  alta: "bg-red-50 text-red-700 border-red-200",
+  media: "bg-amber-50 text-amber-700 border-amber-200",
+  baja: "bg-green-50 text-green-700 border-green-200",
+};
+
+/** El triaje aplica a los correos de entrada; los históricos y manuales no cuentan. */
+export const esCorreoEntrante = (c: Comunicacion) => c.tipo === "ENT" && c.origen === "correo";
+
+export const esNoLeido = (c: Comunicacion) => esCorreoEntrante(c) && !c.leido_en;
+
+export const esUrgente = (c: Comunicacion) =>
+  esCorreoEntrante(c) && (c.categoria === "urgente" || c.prioridad === "alta");
 
 export const TIPO_LABEL: Record<TipoComunicacion, string> = {
   ENT: "Entrada",
@@ -324,6 +370,17 @@ export async function apiObtenerComunicacion(id: number): Promise<Comunicacion> 
   return sgdFetch<Comunicacion>(`/comunicaciones/${id}`);
 }
 
+/** Triaje: marcar como leído o no leído y reclasificar (D-32). Devuelve la comunicación actualizada. */
+export async function apiActualizarTriaje(
+  id: number,
+  cambios: { leido?: boolean; categoria?: CategoriaCorreo; prioridad?: PrioridadCorreo },
+): Promise<Comunicacion> {
+  return sgdFetch<Comunicacion>(`/comunicaciones/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(cambios),
+  });
+}
+
 /** F2 · Remitir a una dependencia con plazo en días hábiles.
  *  El backend revisa el permiso y dispara n8n F2 con el usuario autenticado; n8n envía el correo
  *  y actualiza el estado. (El navegador ya no llama a n8n: su token quedaba expuesto.)
@@ -442,11 +499,6 @@ export async function apiImportarHistorico(
     method: "POST",
     body: JSON.stringify({ filas, confirmar, ...(tipo ? { tipo } : {}) }),
   });
-}
-
-/** ⚠️ SOLO PRUEBAS: elimina físicamente una comunicación y sus archivos. */
-export async function apiEliminarComunicacion(id: number): Promise<{ eliminado: boolean; consecutivo: string }> {
-  return sgdFetch<{ eliminado: boolean; consecutivo: string }>(`/comunicaciones/${id}/eliminar`, { method: "DELETE" });
 }
 
 /** Descarga un adjunto (GET /archivos/{id}) para verlo o guardarlo. */

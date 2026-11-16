@@ -2,7 +2,8 @@
  * @file AppMovil.tsx
  * @description App del celular (PWA) para cargar historias académicas (RF-AC-021, RF-AC-022).
  * Ruta /movil, fuera del Layout de NOVA (pantalla completa en el celular).
- *  - Sesión: la de NOVA (sin sesión, va a /login?redirect=/movil).
+ *  - Sesión: la de NOVA (sin sesión, va a /login?redirect=/movil). En `npm run dev` con VITE_LOGIN_TEMPORAL=true
+ *    también sirve la del login temporal de pruebas (/login-temporal?redirect=/movil). ⚠️ TEMPORAL
  *  - Dos modos, con el mismo destino (Estado → Año → Nivel → Programa) y el título del documento:
  *      · Individual: fotos de las páginas (se unen en un PDF) + apellidos, nombres y cédula del estudiante.
  *      · Masiva: una foto o archivo por estudiante, desde la cámara, la galería o archivos nombrados
@@ -20,6 +21,8 @@ import {
   Trash2, UploadCloud, User, WifiOff, XCircle,
 } from "lucide-react";
 import { tokens } from "../../../lib/api";
+import { LOGIN_TEMPORAL } from "../../../lib/config";
+import { borrarSesionTemporal, leerSesionTemporal } from "../../../lib/loginTemporal"; // ⚠️ TEMPORAL
 import { listarCatalogo } from "../../../lib/catalogosApi";
 import {
   ESTADOS_HISTORIA, apiCargarHistoria, leerNombreArchivo, nivelesDeProgramas, programasDelNivel,
@@ -75,7 +78,9 @@ function Campo({ label, requerido, children }: { label: string; requerido?: bool
   );
 }
 
-const haySesion = () => !!tokens.getAccess();
+const haySesion = () => !!(leerSesionTemporal() ?? tokens.getAccess());
+/** A dónde ir sin sesión: el login temporal de pruebas si está activo (⚠️ TEMPORAL), si no el de NOVA. */
+const URL_LOGIN = LOGIN_TEMPORAL ? "/login-temporal?redirect=/movil" : "/login?redirect=/movil";
 /** Nombre del usuario de NOVA guardado al iniciar sesión (localStorage "usuario"). */
 const nombreDeNova = (): string => {
   try {
@@ -181,9 +186,9 @@ export default function AppMovil() {
   // Libera las miniaturas de las fotos al salir de la pantalla.
   useEffect(() => () => vistas.current.forEach(u => URL.revokeObjectURL(u)), []);
 
-  // Sin sesión → al login de NOVA y de vuelta aquí.
+  // Sin sesión → al login (el temporal de pruebas si está activo; si no, el de NOVA) y de vuelta aquí.
   useEffect(() => {
-    if (!haySesion()) window.location.replace("/login?redirect=/movil");
+    if (!haySesion()) window.location.replace(URL_LOGIN);
   }, []);
 
   useEffect(() => {
@@ -371,13 +376,14 @@ export default function AppMovil() {
       : { tipo: err ? "error" : "ok", texto: err ? `${resumen}. Pulsa Reintentar para los que fallaron.` : `Listo: ${resumen}.` });
   };
 
-  const salir = () => { tokens.clear(); window.location.assign("/login?redirect=/movil"); };
+  const salir = () => { borrarSesionTemporal(); tokens.clear(); window.location.assign(URL_LOGIN); };
 
   if (!haySesion()) {
     return <div className="flex min-h-screen items-center justify-center bg-[#f3ede1] text-[#1e3a5f]"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   }
 
-  const nombreUsuario = nombreDeNova();
+  const temporal = leerSesionTemporal(); // ⚠️ TEMPORAL
+  const nombreUsuario = temporal ? `${temporal.usuario.nombre} ${temporal.usuario.apellido}`.trim() : nombreDeNova();
   const ocupado = subiendo || procesando;
 
   return (

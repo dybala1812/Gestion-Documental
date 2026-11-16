@@ -4,14 +4,30 @@
  */
 import { Paperclip } from "lucide-react";
 import {
-  ESTADO_BADGE, ESTADO_LABEL, TIPO_LABEL,
-  type EstadoComunicacion, type TipoComunicacion, type AdjuntoCom, formatoTamano,
+  CATEGORIA_BADGE, CATEGORIA_LABEL, ESTADO_BADGE, ESTADO_LABEL, PRIORIDAD_BADGE, PRIORIDAD_LABEL, TIPO_LABEL,
+  type CategoriaCorreo, type EstadoComunicacion, type PrioridadCorreo, type TipoComunicacion, type AdjuntoCom, formatoTamano,
 } from "../../lib/comunicacionesApi";
 
 export function EstadoBadge({ estado }: { estado: EstadoComunicacion }) {
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ${ESTADO_BADGE[estado]}`}>
       {ESTADO_LABEL[estado]}
+    </span>
+  );
+}
+
+export function CategoriaBadge({ categoria }: { categoria: CategoriaCorreo }) {
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ${CATEGORIA_BADGE[categoria]}`}>
+      {CATEGORIA_LABEL[categoria]}
+    </span>
+  );
+}
+
+export function PrioridadBadge({ prioridad }: { prioridad: PrioridadCorreo }) {
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ${PRIORIDAD_BADGE[prioridad]}`}>
+      Prioridad {PRIORIDAD_LABEL[prioridad].toLowerCase()}
     </span>
   );
 }

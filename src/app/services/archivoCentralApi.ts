@@ -9,13 +9,17 @@
 import { SGD_API_BASE, mensajeErrorSgd } from "../lib/sgdApi";
 import { tokens } from "../lib/api";
 import type { UbicacionBodega } from "../lib/clasificadosApi";
+import { leerSesionTemporal } from "../lib/loginTemporal"; // ⚠️ TEMPORAL
 
 // La misma URL que sgdApi (también sirve desde otro equipo de la red local).
 const BASE = SGD_API_BASE;
 
-/** Token de NOVA para el backend SGD, igual que sgdApi (nunca un token fijo de .env: quedaría en el JavaScript). */
+/**
+ * Token para el backend SGD: el de la sesión del login temporal de pruebas (⚠️ TEMPORAL) o, si no
+ * hay, el de NOVA, igual que sgdApi. Ya no se usa un token fijo de .env: quedaba dentro del JavaScript.
+ */
 function token(): string | undefined {
-  return tokens.getAccess() ?? undefined;
+  return leerSesionTemporal()?.token ?? tokens.getAccess() ?? undefined;
 }
 
 async function http<T>(ruta: string, init: RequestInit = {}): Promise<T> {
