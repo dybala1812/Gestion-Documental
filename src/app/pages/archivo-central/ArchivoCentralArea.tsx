@@ -15,7 +15,7 @@ import "sileo/styles.css";
 import {
   Home, Upload, Truck, Inbox, FolderCheck, Archive, Search, GraduationCap,
   Mail, MailQuestion, History, BookOpen, FileText, Shield, PanelLeftClose, PanelLeftOpen,
-  Menu, ChevronRight, Hammer,
+  Menu, ChevronRight, Hammer, LoaderCircle, ShieldAlert, RotateCw,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../components/ui/sheet";
@@ -32,6 +32,7 @@ import { CatalogosArea } from "./CatalogosArea";
 import { PlantillasArea } from "./PlantillasArea";
 import { AuditoriaArea } from "./AuditoriaArea";
 import { apiListComunicaciones } from "../../lib/comunicacionesApi";
+import { apiSincronizarSesionSGD } from "../../lib/sgdApi";
 
 type SeccionKey =
   | "inicio" | "centro-cargas" | "transferencias" | "por-clasificar" | "clasificados"
@@ -131,6 +132,9 @@ function Proximamente({ item }: { item: MenuItem }) {
 
 export function ArchivoCentralArea() {
   const { usuario } = useAuth();
+  const [accesoSGD, setAccesoSGD] = useState<boolean | null>(null);
+  const [validandoSesion, setValidandoSesion] = useState(true);
+  const [errorSesion, setErrorSesion] = useState(false);
   const [seccion, setSeccion] = useState<SeccionKey>("inicio");
   const [colapsado, setColapsado] = useState(false);
   const [menuMovil, setMenuMovil] = useState(false);
@@ -142,6 +146,21 @@ export function ArchivoCentralArea() {
   const [abrirTransferenciaId, setAbrirTransferenciaId] = useState<number | null>(null);
   const limpiarComunicacionAbierta = useCallback(() => setAbrirComunicacionId(null), []);
 
+  const validarSesionSGD = useCallback(async () => {
+    setValidandoSesion(true);
+    setErrorSesion(false);
+    try {
+      const resultado = await apiSincronizarSesionSGD();
+      setAccesoSGD(resultado.puede_ingresar);
+    } catch {
+      setErrorSesion(true);
+    } finally {
+      setValidandoSesion(false);
+    }
+  }, []);
+
+  useEffect(() => { void validarSesionSGD(); }, [validarSesionSGD]);
+
   const areaNombre = usuario?.dependencyName ?? "Archivo Central";
   const usuarioNombre = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ") || "Usuario";
   const actual = todosLosItems.find(i => i.key === seccion)!;
@@ -151,6 +170,7 @@ export function ArchivoCentralArea() {
   const ultimaComunicacionId = useRef<number | null>(null);
 
   useEffect(() => {
+    if (accesoSGD !== true) return;
     const consultar = async () => {
       try {
         const lista = await apiListComunicaciones({ estado: "nueva", limite: 1 });
@@ -172,7 +192,7 @@ export function ArchivoCentralArea() {
     consultar();
     const intervalo = setInterval(consultar, 15000);
     return () => clearInterval(intervalo);
-  }, []);
+  }, [accesoSGD]);
 
   const actualizarUltimaComunicacionId = (id: number | undefined) => {
     if (id) ultimaComunicacionId.current = id;
@@ -244,6 +264,47 @@ export function ArchivoCentralArea() {
   );
 
   const seccionCom = aComunicaciones[seccion];
+
+  if (validandoSesion) {
+    return (
+      <main className="flex min-h-[calc(100vh-80px)] items-center justify-center bg-[#f3ede1] px-4">
+        <div className="flex items-center gap-3 rounded-xl border border-[rgba(30,58,95,0.12)] bg-white px-5 py-4 text-sm text-[#1e3a5f] shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
+          Validando tu sesión de NOVA para Archivo Central…
+        </div>
+      </main>
+    );
+  }
+
+  if (errorSesion || accesoSGD !== true) {
+    return (
+      <main className="flex min-h-[calc(100vh-80px)] items-center justify-center bg-[#f3ede1] px-4 py-8">
+        <section className="w-full max-w-lg rounded-2xl border border-[rgba(30,58,95,0.12)] bg-white p-6 shadow-sm" aria-live="polite">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0 text-[#e8740e]" aria-hidden="true" />
+            <div>
+              <h1 className="text-lg font-bold text-[#1e3a5f]">
+                {errorSesion ? "No se pudo validar tu sesión" : "Tu cuenta aún no tiene acceso a Archivo Central"}
+              </h1>
+              <p className="mt-2 text-sm leading-6 text-[#6b7a8d]">
+                {errorSesion
+                  ? "Vuelve a intentarlo. Si el problema continúa, revisa que NOVA y el servicio de Archivo Central estén disponibles."
+                  : "Tu cuenta de NOVA quedó sincronizada. Solicita al administrador del SGD que revise tu perfil y dependencia para habilitar el acceso."}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void validarSesionSGD()}
+            className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white hover:bg-[#152a45] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e3a5f] focus-visible:ring-offset-2"
+          >
+            <RotateCw className="h-4 w-4" aria-hidden="true" />
+            Reintentar
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className="bg-gradient-to-br from-slate-50 to-blue-50 flex items-stretch min-h-[calc(100vh-80px)]">
