@@ -38,18 +38,25 @@ export const VERCEL_ENV: string =
 
 /**
  * ⚠️ TEMPORAL — login de pruebas por perfil del Archivo Central en /login-temporal.
- * Deja entrar SIN pasar por NOVA, así que NUNCA debe existir en producción.
+ * Deja entrar SIN pasar por NOVA. Pensado para entornos de prueba con backend
+ * ficticio; NO debe quedar abierto en el despliegue real con datos reales.
  *
- * Solo se activa cuando AMBAS condiciones se cumplen:
- *   1. El entorno es desarrollo local (`npm run dev`) o un *preview* de Vercel.
- *      La producción de Vercel (VERCEL_ENV === "production") queda excluida por
- *      código, aunque alguien active la variable por error.
- *   2. VITE_LOGIN_TEMPORAL === "true" (en `.env.local` local, o en la variable
- *      con alcance SOLO "Preview" dentro de Vercel).
+ * Interruptor maestro: VITE_LOGIN_TEMPORAL === "true". Según el entorno:
+ *   - Desarrollo local (`npm run dev`) y *preview* de Vercel: basta el maestro.
+ *   - Producción de Vercel (VERCEL_ENV === "production"): el maestro NO alcanza;
+ *     además hay que activar explícitamente VITE_LOGIN_TEMPORAL_ALLOW_PROD === "true".
+ *     Este doble flag evita que el backdoor se cuele por accidente si este mismo
+ *     código llega al despliegue real: ahí simplemente no se define ninguno.
  *
  * La clave vive solo en el backend (SGD_LOGIN_TEMPORAL_CLAVE); aquí no hay secreto.
- * Protege siempre el preview con Deployment Protection (contraseña) de Vercel.
+ * Donde se active, protege el deploy con Deployment Protection de Vercel.
  */
+const ENTORNO_PERMITE_LOGIN_TEMPORAL =
+  import.meta.env.DEV ||
+  VERCEL_ENV === "preview" ||
+  (VERCEL_ENV === "production" &&
+    import.meta.env.VITE_LOGIN_TEMPORAL_ALLOW_PROD === "true");
+
 export const LOGIN_TEMPORAL =
-  (import.meta.env.DEV || VERCEL_ENV === "preview") &&
+  ENTORNO_PERMITE_LOGIN_TEMPORAL &&
   import.meta.env.VITE_LOGIN_TEMPORAL === "true";
