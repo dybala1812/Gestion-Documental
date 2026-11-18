@@ -21,26 +21,29 @@ export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
  * - `set()`        → persiste ambos tokens tras un login o refresco exitoso.
  * - `clear()`      → elimina tokens y datos de sesión; se llama en logout o 401 irrecuperable.
  */
+import { STATIC_SGD_TOKEN } from "./staticUser";
+
 export const tokens = {
   /**
-   * Devuelve el access token. Primero busca en sessionStorage (pestaña actual),
-   * luego en localStorage (compartido entre pestañas).
-   * Esto permite que nuevas pestañas reutilicen el token activo sin un refresh
-   * adicional que rotaría (e invalidaría) el refresh_token de las demás.
+   * Devuelve el access token. En modo de pruebas sin login siempre cae en el
+   * token estático de desarrollo (STATIC_SGD_TOKEN) para que todas las APIs
+   * autenticadas funcionen sin pasar por NOVA.
    */
   getAccess: () =>
+    STATIC_SGD_TOKEN ||
     sessionStorage.getItem("access_token") ||
     localStorage.getItem("_at_shared") ||
     null,
-  /** Devuelve el refresh token actual o null si no existe. */
-  getRefresh: () => localStorage.getItem("refresh_token"),
+  /** Devuelve el refresh token. En modo de pruebas es el mismo token estático. */
+  getRefresh: () => STATIC_SGD_TOKEN || localStorage.getItem("refresh_token"),
   /** Guarda ambos tokens: access en sessionStorage + localStorage compartido, refresh en localStorage. */
   set: (access: string, refresh: string) => {
     sessionStorage.setItem("access_token", access);
     localStorage.setItem("_at_shared", access);   // compartido entre pestañas
     localStorage.setItem("refresh_token", refresh);
   },
-  /** Elimina tokens y datos de sesión del almacenamiento (cierre de sesión). */
+  /** Elimina tokens y datos de sesión del almacenamiento (cierre de sesión).
+   *  En modo de pruebas mantiene el token estático para no romper la conexión. */
   clear: () => {
     sessionStorage.removeItem("access_token");
     localStorage.removeItem("_at_shared");
@@ -174,6 +177,8 @@ async function tryRefresh(): Promise<boolean> {
   _refreshPromise = (async () => {
     const refresh = tokens.getRefresh();
     if (!refresh) return false;
+    // En modo de pruebas el token estático no necesita refresh contra NOVA.
+    if (refresh === STATIC_SGD_TOKEN) return true;
     try {
       const res = await fetch(`${API_BASE}/api/login/refresh/`, {
         method: "POST",
