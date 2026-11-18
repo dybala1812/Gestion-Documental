@@ -131,6 +131,11 @@ export async function sgdFetch<T>(
   return res.json() as Promise<T>;
 }
 
+/** Valida la sesión de NOVA al entrar al módulo y sincroniza solo a ese usuario en SGD. */
+export async function apiSincronizarSesionSGD(): Promise<{ puede_ingresar: boolean }> {
+  return sgdFetch<{ puede_ingresar: boolean }>("/sesion", { method: "POST" });
+}
+
 /**
  * Descarga un binario del backend SGD (p. ej. GET /archivos/{id}) con el mismo
  * token que sgdFetch. Devuelve el Blob y el nombre del archivo (Content-Disposition).
