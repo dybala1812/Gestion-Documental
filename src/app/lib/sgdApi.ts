@@ -6,7 +6,7 @@
  * token contra NOVA y sincroniza el usuario en la base del SGD (PostgreSQL).
  */
 import { tokens, ApiError, tryRefreshToken } from "./api";
-import { borrarSesionTemporal, leerSesionTemporal } from "./loginTemporal"; // ⚠️ TEMPORAL
+import { STATIC_SGD_TOKEN } from "./staticUser";
 
 /**
  * URL base del backend SGD. Se lee de VITE_SGD_API_URL.
@@ -87,21 +87,12 @@ export async function sgdFetch<T>(
     ...(options.headers as Record<string, string>),
   };
 
-  // ⚠️ TEMPORAL: con el login de pruebas (/login-temporal) se envía su token en lugar del de NOVA.
-  const temporal = leerSesionTemporal();
-  const token = temporal?.token ?? tokens.getAccess();
+  const token = STATIC_SGD_TOKEN || tokens.getAccess();
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
   const res = await fetch(url, { ...options, headers });
-
-  if (res.status === 401 && temporal) {
-    // La sesión temporal venció o se reinició el backend: hay que volver a entrar.
-    borrarSesionTemporal();
-    const err = await res.json().catch(() => ({}));
-    throw errorSgd(401, err);
-  }
 
   if (res.status === 401) {
     const sentToken = (headers["Authorization"] as string | undefined)?.slice(7) ?? null;
@@ -141,7 +132,7 @@ export async function apiSincronizarSesionSGD(): Promise<{ puede_ingresar: boole
  * token que sgdFetch. Devuelve el Blob y el nombre del archivo (Content-Disposition).
  */
 export async function sgdFetchBlob(path: string): Promise<{ blob: Blob; nombre: string | null }> {
-  const token = leerSesionTemporal()?.token ?? tokens.getAccess();
+  const token = STATIC_SGD_TOKEN || tokens.getAccess();
   const res = await fetch(`${SGD_API_BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });

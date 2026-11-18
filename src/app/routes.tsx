@@ -1,13 +1,9 @@
 import React, { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate } from "react-router";
 import { Loader2 } from "lucide-react";
-import { useAuth } from "./context/AuthContext";
-import { LOGIN_TEMPORAL } from "./lib/config"; // ⚠️ TEMPORAL
 import { Layout } from "./components/layout/Layout";
 import { Home } from "./pages/Home";
 import { NovaLanding } from "./pages/NovaLanding";
-import { Login } from "./pages/Login";
-import { Register } from "./pages/Register";
 import { ConsultaRadicado } from "./pages/pqrs/ConsultaRadicado";
 import { UserDashboard } from "./pages/pqrs/UserDashboard";
 import { AdminDashboard } from "./pages/pqrs/AdminDashboard";
@@ -26,8 +22,6 @@ import { GestionManual } from "./pages/admin/GestionManual";
 import { GestionWhatsAppMasivo } from "./pages/admin/GestionWhatsAppMasivo";
 import { Contactos } from "./pages/Contactos";
 import { Perfil } from "./pages/Perfil";
-import { ForgotPassword } from "./pages/ForgotPassword";
-import { ResetPassword } from "./pages/ResetPassword";
 import { NotFound } from "./pages/NotFound";
 import { PoliticaTratamientoDatos } from "./pages/PoliticaTratamientoDatos";
 import { PoliticaPQRS } from "./pages/PoliticaPQRS";
@@ -63,197 +57,42 @@ function AuthSpinner() {
   );
 }
 
-// ── Guardia de rutas protegidas ───────────────────────────────────────────────
-/**
- * Componente guardia que protege rutas según autenticación y rol.
- *
- * Usa el contexto `useAuth()` en lugar de leer localStorage directamente,
- * lo que garantiza que la decisión de acceso se toma con el estado de sesión
- * más actualizado (incluyendo la revalidación en background del perfil).
- *
- * Comportamiento:
- *  1. Mientras `loading=true` (revalidando token), muestra un spinner.
- *  2. Sin sesión activa → redirige a `/login`.
- *  3. `adminOnly=true` y el rol no es "admin" → redirige a la home del rol actual.
- *  4. `areaOnly=true` y el rol no es "area"   → redirige a la home del rol actual.
- *  5. Pasa todas las validaciones → renderiza `children`.
- */
-function ProtectedRoute({
-  children,
-  adminOnly = false,
-  areaOnly  = false,
-}: {
-  children: React.ReactNode;
-  adminOnly?: boolean;
-  areaOnly?:  boolean;
-}) {
-  const { usuario, loading } = useAuth();
-
-  // Aguardar mientras AuthContext verifica/refresca la sesión
-  if (loading) return <AuthSpinner />;
-
-  // Sin sesión activa → login
-  if (!usuario) return <Navigate to="/login" replace />;
-
-  // Ruta exclusiva para admin.
-  // Se comprueba tanto rol como is_staff para resistir condiciones de carrera
-  // donde el background refresh pudo haber llegado con datos inconsistentes.
-  const esAdmin = usuario.rol === "admin" || usuario.is_staff;
-  if (adminOnly && !esAdmin) {
-    return <Navigate to={usuario.rol === "area" ? "/area" : "/dashboard"} replace />;
-  }
-
-  // Ruta exclusiva para área — también redirige si el usuario es admin (por rol o is_staff)
-  if (areaOnly && (usuario.rol !== "area" || esAdmin)) {
-    return <Navigate to={esAdmin ? "/admin" : "/dashboard"} replace />;
-  }
-
+// ── Guardias de rutas (modo pruebas: siempre pasan) ───────────────────────────
+function ProtectedRoute({ children }: { children: React.ReactNode; adminOnly?: boolean; areaOnly?: boolean }) {
   return <>{children}</>;
-}
-
-function hasDiplomaAccess(user: { rol?: string; is_staff?: boolean; roles?: string[] } | null) {
-  if (!user) return false;
-  const roleCodes = (user.roles ?? []).map((role) => String(role).trim().toUpperCase());
-  return !!user.is_staff || user.rol === "admin" || roleCodes.includes("ADMIN") || roleCodes.includes("COORDINATOR") || roleCodes.includes("COORDINACION");
 }
 
 function DiplomaRoute({ children }: { children: React.ReactNode }) {
-  const { usuario, loading } = useAuth();
-  if (loading) return <AuthSpinner />;
-  if (!usuario) return <Navigate to="/login" replace />;
-  if (!hasDiplomaAccess(usuario)) {
-    return <Navigate to={usuario.rol === "area" ? "/area" : "/dashboard"} replace />;
-  }
   return <>{children}</>;
 }
 
-// ── Guardia inteligente para /dashboard ──────────────────────────────────────
-/**
- * Redirige automáticamente a la vista correcta según el rol:
- *  - admin → /admin
- *  - área  → /area
- *  - usuario → muestra UserDashboard normalmente
- * Evita que un admin quede "atrapado" en el panel de usuario.
- */
-
-// ── Guardia para rutas TI ─────────────────────────────────────────────────────
-/**
- * Protege rutas del módulo de Inventario TI.
- * Solo pueden acceder usuarios con is_staff = true o rol TI_STAFF.
- */
 function TIRoute({ children }: { children: React.ReactNode }) {
-  const { usuario, loading } = useAuth();
-  if (loading) return <AuthSpinner />;
-  if (!usuario) return <Navigate to="/login" replace />;
-  const tiAccess = usuario.is_staff || (usuario.roles ?? []).includes("TI_STAFF");
-  if (!tiAccess) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
-// ── Guardia para /elecciones (acceso independiente del panel) ────────────────
-/**
- * Permite abrir el módulo de Elecciones fuera del panel de usuario, para
- * usuarios que aterrizan en el panel de área (admin_area / is_area_leader)
- * pero además tienen el rol REGISTRO_CONTROL, igual que se maneja TI_STAFF.
- */
 function EleccionesRoute({ children }: { children: React.ReactNode }) {
-  const { usuario, loading } = useAuth();
-  if (loading) return <AuthSpinner />;
-  if (!usuario) return <Navigate to="/login?redirect=/elecciones" replace />;
-  const perfilHabilitado = ["estudiante", "docente", "admin_area"].includes(usuario.perfil_tipo ?? "");
-  const acceso = usuario.is_staff || usuario.dependencyId || (usuario.roles ?? []).includes("REGISTRO_CONTROL") || (usuario.roles ?? []).includes("ADMIN") || perfilHabilitado;
-  if (!acceso) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
-// ── Guardia para el módulo Archivo Central (SGD) ─────────────────────────────
-/**
- * Acceso al módulo superior Archivo Central. Por el momento solo expone
- * Comunicaciones, pero aquí se centralizarán documentos, transferencias,
- * historias académicas e histórico. Permite admin, funcionarios de área y
- * perfiles institucionales vinculados al SGD.
- */
 function ArchivoCentralRoute({ children }: { children: React.ReactNode }) {
-  const { usuario, loading } = useAuth();
-  if (loading) return <AuthSpinner />;
-  if (!usuario) return <Navigate to={LOGIN_TEMPORAL ? "/login-temporal" : "/login?redirect=/archivo-central"} replace />;
-
-  // Archivo Central es un módulo del Panel de Área de NOVA: solo entra el rol "area".
-  // Qué puede hacer cada persona dentro lo decide el backend según su perfil del SGD.
-  if (usuario.rol !== "area") {
-    return <Navigate to={usuario.rol === "admin" ? "/admin" : "/dashboard"} replace />;
-  }
   return <>{children}</>;
 }
 
 function DashboardGuard() {
-  const { usuario, loading } = useAuth();
-
-  if (loading) return <AuthSpinner />;
-  if (!usuario) return <Navigate to="/login" replace />;
-  // Comprueba rol Y is_staff para resistir condiciones de carrera del background refresh
-  if (usuario.rol === "admin" || usuario.is_staff) return <Navigate to="/admin" replace />;
-  if (usuario.rol === "area")  return <Navigate to="/area"  replace />;
-  return <UserDashboard />;
+  return <AreaDashboard />;
 }
 
-// ── Guardia para /docente ─────────────────────────────────────────────────────
-/**
- * URL de acceso directo para docentes (ej. nova.uniautonoma.edu.co/docente).
- * Si no hay sesión activa, redirige a login preservando el destino original
- * (?redirect=/docente) para volver aquí automáticamente tras autenticarse.
- */
 function DocenteGuard() {
-  const { usuario, loading } = useAuth();
-
-  if (loading) return <AuthSpinner />;
-  if (!usuario) return <Navigate to="/login?redirect=/docente" replace />;
-  if (usuario.rol === "admin" || usuario.is_staff) return <Navigate to="/admin" replace />;
-  if (usuario.rol === "area")  return <Navigate to="/area"  replace />;
-  return <UserDashboard />;
+  return <AreaDashboard />;
 }
 
 function WhatsAppBulkGuard() {
-  const { usuario, loading } = useAuth();
-
-  if (loading) return <AuthSpinner />;
-  if (!usuario) return <Navigate to="/login" replace />;
-
-  const hasAdminPrivileges = usuario.rol === "admin" || usuario.is_staff;
-  const isAdministrativeArea =
-    usuario.perfil_tipo === "admin_area" ||
-    !!usuario.is_area_leader ||
-    !!usuario.can_handle_pqrs ||
-    !!usuario.can_consume_campus_api;
-
-  if (!hasAdminPrivileges && !isAdministrativeArea) {
-    return <Navigate to={usuario.rol === "area" ? "/area" : "/dashboard"} replace />;
-  }
-
   return <GestionWhatsAppMasivo />;
 }
 
 function CampusLookupGuard() {
-  const { usuario, loading } = useAuth();
-
-  if (loading) return <AuthSpinner />;
-  if (!usuario) return <Navigate to="/login" replace />;
-
-  const isAllowed =
-    usuario.rol === "admin" ||
-    usuario.is_staff ||
-    (usuario.roles ?? []).includes("ADMIN") ||
-    !!usuario.can_consume_campus_api;
-
-  if (!isAllowed) {
-    return <Navigate to={usuario.rol === "area" ? "/area" : "/dashboard"} replace />;
-  }
-
   return <CampusStudentLookup />;
 }
-
-// ⚠️ TEMPORAL (ver la ruta "login-temporal").
-const LoginTemporal = LOGIN_TEMPORAL ? lazy(() => import("./pages/login-temporal/LoginTemporal")) : null;
 
 // Archivo Central · app del celular (PWA, RF-AC-022). Fuera del Layout: pantalla completa en el celular.
 const AppMovil = lazy(() => import("./pages/archivo-central/movil/AppMovil"));
@@ -274,22 +113,6 @@ export const router = createBrowserRouter([
       {
         path: "pqrs",
         Component: Home,
-      },
-      {
-        path: "login",
-        Component: Login,
-      },
-      {
-        path: "registro",
-        Component: Register,
-      },
-      {
-        path: "forgot-password",
-        Component: ForgotPassword,
-      },
-      {
-        path: "reset-password",
-        Component: ResetPassword,
       },
       {
         path: "politica-datos",
@@ -479,11 +302,6 @@ export const router = createBrowserRouter([
           </ArchivoCentralRoute>
         ),
       },
-      // ⚠️ TEMPORAL — login de pruebas por perfil. Fuera de `npm run dev` con VITE_LOGIN_TEMPORAL=true
-      // la ruta no existe y su código no entra al build. Borrar antes del despliegue.
-      ...(LoginTemporal
-        ? [{ path: "login-temporal", element: <Suspense fallback={<AuthSpinner />}><LoginTemporal /></Suspense> }]
-        : []),
       {
         path: "area",
         element: (

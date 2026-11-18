@@ -132,8 +132,8 @@ function Proximamente({ item }: { item: MenuItem }) {
 
 export function ArchivoCentralArea() {
   const { usuario } = useAuth();
-  const [accesoSGD, setAccesoSGD] = useState<boolean | null>(null);
-  const [validandoSesion, setValidandoSesion] = useState(true);
+  const [accesoSGD, setAccesoSGD] = useState<boolean | null>(true);
+  const [validandoSesion, setValidandoSesion] = useState(false);
   const [errorSesion, setErrorSesion] = useState(false);
   const [seccion, setSeccion] = useState<SeccionKey>("inicio");
   const [colapsado, setColapsado] = useState(false);
@@ -159,7 +159,8 @@ export function ArchivoCentralArea() {
     }
   }, []);
 
-  useEffect(() => { void validarSesionSGD(); }, [validarSesionSGD]);
+  // Modo pruebas sin login: se salta la validación contra NOVA/SGD.
+  // useEffect(() => { void validarSesionSGD(); }, [validarSesionSGD]);
 
   const areaNombre = usuario?.dependencyName ?? "Archivo Central";
   const usuarioNombre = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ") || "Usuario";
