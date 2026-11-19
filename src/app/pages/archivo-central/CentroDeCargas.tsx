@@ -26,8 +26,8 @@ interface Carga {
   icono: React.ElementType;
 }
 
-/** Ocultas por ahora (pedido del usuario, 30/10/2026): A · Documento individual y E · Registro histórico. */
-const OCULTAS: string[] = ["A", "E"];
+/** Ocultas por ahora (pedido del usuario): A · Documento individual y E · Registro histórico (30/10/2026), F · App móvil (19/11/2026). */
+const OCULTAS: string[] = ["A", "E", "F"];
 
 const CARGAS: Carga[] = [
   { id: "A", titulo: "Documento individual", descripcion: "Un PDF o imagen con sus datos. Si faltan datos, queda por clasificar.", quien: "Archivo Central", icono: FileInput },
